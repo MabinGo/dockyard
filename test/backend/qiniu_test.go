@@ -1,13 +1,14 @@
-package aliyun
+package backend
 
 import (
 	"net/http"
 	"testing"
 
+	"github.com/containerops/dockyard/backend/driver/qiniu"
 	"github.com/containerops/wrench/setting"
 )
 
-func Test_aliyunsave(t *testing.T) {
+func Test_qiniusave(t *testing.T) {
 	var err error
 	var url string
 
@@ -15,8 +16,8 @@ func Test_aliyunsave(t *testing.T) {
 		t.Error(err)
 	}
 
-	file := "aliyun_test.go"
-	url, err = aliyunsave(file)
+	file := "qiniu_test.go"
+	url, err = qiniusave(file)
 	if err != nil {
 		t.Error(err)
 	}
