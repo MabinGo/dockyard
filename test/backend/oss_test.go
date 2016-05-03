@@ -1,8 +1,9 @@
-package oss
+package backend
 
 import (
 	"testing"
 
+	"github.com/containerops/dockyard/backend/driver/oss"
 	"github.com/containerops/wrench/setting"
 )
 

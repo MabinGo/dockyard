@@ -171,12 +171,12 @@ func upload_follow(fin *os.File, session string, filesize int64, requestUrl stri
 	}
 	var offsetsta int64
 	var offsetend int64
+	var filedata string
 	var cnt int
 	var uploaddata = make([]byte, Criticalsize)
 	var header = make(http.Header)
 
 	for {
-		var filedata string
 		offsetsta = offsetend
 		offsetend += Criticalsize
 		if offsetend >= filesize {

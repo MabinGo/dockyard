@@ -1,4 +1,4 @@
-package googlecloud
+package backend
 
 import (
 	"io"
@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/containerops/dockyard/backend/driver/googlecloud"
 	"github.com/containerops/wrench/setting"
 )
 

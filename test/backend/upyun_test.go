@@ -1,9 +1,10 @@
-package upyun
+package backend
 
 import (
 	"net/http"
 	"testing"
 
+	"github.com/containerops/dockyard/backend/driver/upyun"
 	"github.com/containerops/wrench/setting"
 )
 

@@ -1,9 +1,10 @@
-package qcloud
+package backend
 
 import (
 	"net/http"
 	"testing"
 
+	"github.com/containerops/dockyard/backend/driver/qcloud"
 	"github.com/containerops/wrench/setting"
 )
 
