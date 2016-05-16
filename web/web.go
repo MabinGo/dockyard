@@ -6,11 +6,13 @@ import (
 
 	"gopkg.in/macaron.v1"
 
+	"github.com/containerops/dockyard/auth/dao"
 	"github.com/containerops/dockyard/backend"
 	"github.com/containerops/dockyard/middleware"
 	"github.com/containerops/dockyard/models"
 	"github.com/containerops/dockyard/oss"
 	"github.com/containerops/dockyard/router"
+	"github.com/containerops/dockyard/synchron"
 	"github.com/containerops/dockyard/utils/db"
 	"github.com/containerops/dockyard/utils/setting"
 )
@@ -19,14 +21,31 @@ func SetDockyardMacaron(m *macaron.Macaron) {
 	if err := db.RegisterDriver(setting.DBDriver); err != nil {
 		fmt.Printf("Register database driver error: %s\n", err.Error())
 	} else {
-		db.Drv.RegisterModel(new(models.Repository), new(models.Tag), new(models.Image))
-		err := db.Drv.InitDB(setting.DBDriver, setting.DBUser, setting.DBPasswd, setting.DBURI, setting.DBName, setting.DBDB)
-		if err != nil {
+		db.Drv.RegisterModel(new(models.Tag), new(models.Image), new(models.Repository),
+			new(dao.Organization), new(dao.User), new(dao.OrganizationUserMap),
+			new(dao.RepositoryEx), new(dao.Team), new(dao.TeamRepositoryMap), new(dao.TeamUserMap),
+			new(models.Region))
+
+		if err := db.Drv.InitDB(
+			setting.DBDriver,
+			setting.DBUser,
+			setting.DBPasswd,
+			setting.DBURI,
+			setting.DBName,
+			setting.DBDB); err != nil {
 			fmt.Printf("Connect database error: %s\n", err.Error())
+		}
+
+		if err := dao.InitDAO(); err != nil {
+			fmt.Printf("Init database access object error: %s\n", err.Error())
 		}
 	}
 
-	backend.InitBackend()
+	if setting.Backend != "" {
+		if err := backend.RegisterDriver(setting.Backend); err != nil {
+			fmt.Printf("Register backend driver error: %s\n", err.Error())
+		}
+	}
 
 	if err := middleware.Initfunc(); err != nil {
 		fmt.Printf("Init middleware error: %s\n", err.Error())
@@ -44,4 +63,9 @@ func SetDockyardMacaron(m *macaron.Macaron) {
 		ossobj.StartOSS()
 	}
 
+	if setting.SynMode != "" {
+		if err := synchron.InitSynchron(); err != nil {
+			fmt.Printf("Init synchron error: %s\n", err.Error())
+		}
+	}
 }

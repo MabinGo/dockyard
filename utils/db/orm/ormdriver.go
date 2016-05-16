@@ -129,3 +129,40 @@ func (od *ormdrv) Update(obj interface{}, params ...string) error {
 
 	return err
 }
+
+func (od *ormdrv) Delete(obj interface{}) error {
+	o := orm.NewOrm()
+
+	err := o.Begin()
+	if err != nil {
+		return err
+	}
+
+	if _, err := o.Delete(obj); err != nil {
+		o.Rollback()
+	} else {
+		o.Commit()
+	}
+
+	return err
+}
+
+func (od *ormdrv) List(obj interface{}) ([]string, error) {
+	var maps []orm.Params
+
+	o := orm.NewOrm()
+	slice := []string{}
+	//num > 0 means there are some repositories in repository table.
+	num, err := o.Raw("SELECT namespace,repository FROM repository").Values(&maps)
+	if err == nil && num > 0 {
+		for num = num - 1; num >= 0; num-- {
+			if maps[num]["namespace"] != nil {
+				slice = append(slice, maps[num]["namespace"].(string)+"/"+maps[num]["repository"].(string))
+			} else {
+				slice = append(slice, maps[num]["repository"].(string))
+			}
+		}
+		return slice, nil
+	}
+	return slice, err
+}

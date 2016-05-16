@@ -47,3 +47,17 @@ func (t *Tag) Save(namespace, repository, tag string) error {
 	return err
 
 }
+
+func (t *Tag) Delete(namespace, repository, tag string) error {
+	tg := Tag{Namespace: namespace, Repository: repository, Tag: tag}
+	_, err := tg.Get(namespace, repository, tag)
+	if err != nil {
+		return err
+	}
+
+	t.Namespace, t.Repository, t.Tag = namespace, repository, tag
+	err = db.Drv.Delete(t)
+
+	return err
+
+}

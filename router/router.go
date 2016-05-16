@@ -3,6 +3,7 @@ package router
 import (
 	"gopkg.in/macaron.v1"
 
+	"github.com/containerops/dockyard/auth/controller"
 	"github.com/containerops/dockyard/handler"
 	"github.com/containerops/dockyard/oss"
 	"github.com/containerops/dockyard/oss/apiserver"
@@ -37,6 +38,9 @@ func SetRouters(m *macaron.Macaron) {
 	//Docker Registry & Hub V2 API
 	m.Group("/v2", func() {
 		m.Get("/", handler.GetPingV2Handler)
+		m.Get("/_catalog", handler.GetCatalogV2Handler)
+
+		//user mode: /namespace/repository:tag
 		m.Head("/:namespace/:repository/blobs/:digest", handler.HeadBlobsV2Handler)
 		m.Post("/:namespace/:repository/blobs/uploads", handler.PostBlobsV2Handler)
 		m.Patch("/:namespace/:repository/blobs/uploads/:uuid", handler.PatchBlobsV2Handler)
@@ -45,11 +49,24 @@ func SetRouters(m *macaron.Macaron) {
 		m.Put("/:namespace/:repository/manifests/:tag", handler.PutManifestsV2Handler)
 		m.Get("/:namespace/:repository/tags/list", handler.GetTagsListV2Handler)
 		m.Get("/:namespace/:repository/manifests/:tag", handler.GetManifestsV2Handler)
+		m.Delete("/:namespace/:repository/blobs/:digest", handler.DeleteBlobsV2Handler)
+		m.Delete("/:namespace/:repository/manifests/:reference", handler.DeleteManifestsV2Handler)
+
+		//library mode: /repository:tag
+		m.Head("/:repository/blobs/:digest", handler.HeadBlobsV2Handler)
+		m.Post("/:repository/blobs/uploads", handler.PostBlobsV2Handler)
+		m.Patch("/:repository/blobs/uploads/:uuid", handler.PatchBlobsV2Handler)
+		m.Put("/:repository/blobs/uploads/:uuid", handler.PutBlobsV2Handler)
+		m.Get("/:repository/blobs/:digest", handler.GetBlobsV2Handler)
+		m.Put("/:repository/manifests/:tag", handler.PutManifestsV2Handler)
+		m.Get("/:repository/tags/list", handler.GetTagsListV2Handler)
+		m.Get("/:repository/manifests/:tag", handler.GetManifestsV2Handler)
+		m.Delete("/:repository/blobs/:digest", handler.DeleteBlobsV2Handler)
+		m.Delete("/:repository/manifests/:reference", handler.DeleteManifestsV2Handler)
 	})
 
 	//Rkt Registry & Hub API
 	m.Get("/:namespace/:repository/?ac-discovery=1", handler.DiscoveryACIHandler)
-
 	m.Group("/ac", func() {
 		m.Group("/fetch", func() {
 			m.Get("/:namespace/:repository/pubkeys", handler.GetPubkeysHandler)
@@ -75,5 +92,60 @@ func SetRouters(m *macaron.Macaron) {
 			m.Post("/file", apiserver.UploadFile)
 			m.Delete("/file", apiserver.DeleteFile)
 		})
+	})
+
+	m.Group("/uam", func() {
+		//Authorization service
+		m.Get("/auth", controller.GetAuthorize)
+		m.Delete("/auth", controller.DeleteAuthorize)
+
+		//user
+		m.Group("/user", func() {
+			m.Post("/signup", controller.SignUp)
+			m.Get("/signin", controller.SignIn)
+		})
+
+		//repository
+		m.Group("/repository", func() {
+			m.Post("/", controller.CreateRepository)
+			m.Delete("/:namespace/:repository", controller.DeleteRepository)
+		})
+
+		//organization
+		m.Group("/organization", func() {
+			m.Post("/", controller.CreateOrganization)
+			m.Delete("/:organization", controller.DeleteOrganization)
+			m.Post("/adduser/", controller.AddUserToOrganization)
+			m.Delete("/removeuser/:organization/:user", controller.RemoveUserFromOrganization)
+		})
+
+		//team
+		m.Group("/team", func() {
+			m.Post("/", controller.CreateTeam)
+			m.Delete("/:organization/:team", controller.DeleteTeam)
+			m.Post("/adduser/", controller.AddUserToTeam)
+			m.Delete("/removeuser/:organization/:team/:user", controller.RemoveUserFromTeam)
+			m.Post("/addrepository/", controller.AddRepositoryToTeam)
+			m.Delete("/removerepository/:organization/:team/:repository", controller.RemoveRepositoryFromTeam)
+		})
+	})
+
+	//TODO
+	//images distributed
+	m.Group("/syn", func() {
+		//注册同步分发镜像区域
+		//json body: {"region":"Asia","dest":"http://containerops.me:8080"}
+		m.Post("/register/:namespace/:repository/:tag", handler.PostSynRegionHandler)
+
+		//主动触发指定镜像的同步分发
+		m.Put("/:namespace/:repository/:tag", handler.PutSynRegionHandler)
+
+		//处理获取到的同步镜像
+		m.Get("/:namespace/:repository/:tag/region", handler.GetSynRegionHandler)
+
+		//m.Put("/region/metadate", handler.PutSynMetadateHandler)
+		//m.Put("/region/layer", handler.PutSynLayerHandler)
+		//m.Get("/region/metadate", handler.GetSynMetadateHandler)
+		//m.Get("/region/layer", handler.GetSynLayerHandler)
 	})
 }

@@ -29,7 +29,7 @@ func init() {
 func (n *notification) InitFunc() error {
 	var sinks []Sink
 
-	for _, e := range setting.JSONConfCtx.Notifications.Endpoints {
+	for _, e := range setting.JsonConf.Notifications.Endpoints {
 		if e.Disabled {
 			continue
 		}

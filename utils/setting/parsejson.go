@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-type NotificationsCtx struct {
+type NotificationsDesc struct {
 	Name      string         `json:"name,omitempty"`
 	Endpoints []EndpointDesc `json:"endpoints,omitempty"`
 }
@@ -25,16 +25,16 @@ type EndpointDesc struct {
 	Disabled  bool          `json:"disabled"`
 }
 
-type AuthorDesc map[string]interface{}
+type AuthorItem map[string]interface{}
 
-type AuthorsCtx map[string]AuthorDesc
+type AuthorDesc map[string]AuthorItem
 
-type Desc struct {
-	Notifications NotificationsCtx `json:"notifications,omitempty"`
-	Authors       AuthorsCtx       `json:"auth,omitempty"`
+type JsonDesc struct {
+	Notifications NotificationsDesc `json:"notifications,omitempty"`
+	Authors       AuthorDesc        `json:"auth,omitempty"`
 }
 
-var JSONConfCtx Desc
+var JsonConf JsonDesc
 
 func GetConfFromJSON(path string) error {
 	fp, err := os.Open(path)
@@ -47,18 +47,18 @@ func GetConfFromJSON(path string) error {
 		return fmt.Errorf("err: %v", err.Error())
 	}
 
-	if err := json.Unmarshal(buf, &JSONConfCtx); err != nil {
+	if err := json.Unmarshal(buf, &JsonConf); err != nil {
 		return fmt.Errorf("err: %v", err.Error())
 	}
 
 	return nil
 }
 
-func (auth AuthorsCtx) Name() (name string) {
-	name = ""
+func (auth AuthorDesc) Name() string {
+	name := ""
 	for key, _ := range auth {
 		name = key
 		break
 	}
-	return
+	return name
 }

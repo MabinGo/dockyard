@@ -7,6 +7,7 @@ import (
 	"github.com/codegangsta/cli"
 
 	"github.com/containerops/dockyard/cmd"
+	_ "github.com/containerops/dockyard/middleware/auth/token"
 	_ "github.com/containerops/dockyard/middleware/notifications"
 	"github.com/containerops/dockyard/utils/setting"
 )

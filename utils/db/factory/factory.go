@@ -11,6 +11,8 @@ type DRFactory interface {
 	Update(obj interface{}, params ...string) error
 	Get(obj interface{}, params ...string) (bool, error)
 	Save(obj interface{}, params ...string) error
+	Delete(obj interface{}) error
+	List(obj interface{}) ([]string, error)
 }
 
 var Drivers = make(map[string]DRFactory)

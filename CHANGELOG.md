@@ -1,15 +1,33 @@
 # CHANGELOG
 
-## 0.5.0
+## Dockyard v0.7.0
+新特性增量开发及Bug修复
+#### 新特性
+* 支持organization/team/user三级用户权限管理模型 
 
-Dockyard 0.5.0 is an incremental release with new features,bug fixes and new support for Go 1.5.3.
+#### Bug修复
+* 修正上传两个相同tag的镜像后者的镜像信息未覆盖前者的信息问题 
 
-#### New features
+## Dockyard v0.6.0
+新特性增量开发
+#### 新特性
+* 支持ceph对象存储驱动
+* 支持查询docker镜像功能
+* 支持删除docker镜像功能
+* 兼容docker API规范
+* backend驱动框架使能
+* 镜像存储去本地化
+* 解除对wrench依赖
 
-- New support for ACI storage,support rkt fetch&push ACIs from Dockyard,adapt to rkt and acpush client.
-- New support for OSS that is a distributed replicated object store.See [OSS](oss/README.md) documentation.
+#### Bug修复
+* N/A
 
-#### Bug fixes
+## Dockyard v0.5.0
+新特性增量开发及Bug修复，切换Go 1.5.3.
+#### 新特性
+* 支持ACI镜像存储
+* 支持Dockayrd自研OSS对象存储服务，链接：[OSS](oss/README.md)
 
-- Fix and update the system test case.
-- Fix V2 protocol bug.
+#### Bug修复
+* 修正系统测试用例问题
+* 修正docker V2协议问题

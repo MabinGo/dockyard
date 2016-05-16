@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/containerops/dockyard/utils/setting"
 )
 
 func TestPullInit(t *testing.T) {
@@ -16,6 +18,13 @@ func TestPullInit(t *testing.T) {
 	reponame := "busybox"
 	repotags := []string{"latest", "1.0", "2.0"}
 	repoBase := reponame + ":" + repotags[0]
+
+	if setting.Authmode == "token" {
+		cmd := exec.Command("sudo", DockerBinary, "login", "-u", user.Name, "-p", user.Password, "-e", user.Email, Domains)
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("Docker login faild: [Error]%v", err)
+		}
+	}
 
 	if err = exec.Command(DockerBinary, "inspect", repoBase).Run(); err != nil {
 		cmd = exec.Command(DockerBinary, "pull", repoBase)

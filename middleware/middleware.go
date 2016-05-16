@@ -35,9 +35,12 @@ type HandlerInterface interface {
 	Handler(ctx *macaron.Context)
 }
 
-var Middleware map[string]HandlerInterface = map[string]HandlerInterface{}
+var Middleware = map[string]HandlerInterface{}
 
 func Register(name string, handler HandlerInterface) error {
+	if handler == nil {
+		return fmt.Errorf("Handler is nil")
+	}
 
 	if _, existed := Middleware[name]; existed {
 		return fmt.Errorf("%v has already been registered", name)
@@ -49,9 +52,8 @@ func Register(name string, handler HandlerInterface) error {
 }
 
 func Initfunc() error {
-	var namespace []string = []string{setting.JSONConfCtx.Authors.Name(), setting.JSONConfCtx.Notifications.Name}
-
-	for _, name := range namespace {
+	mwname := []string{setting.Auth, setting.JsonConf.Notifications.Name}
+	for _, name := range mwname {
 		if handlerinterface, existed := Middleware[name]; existed {
 			if err := handlerinterface.InitFunc(); err != nil {
 				return fmt.Errorf("Init %v failed, err: %v", name, err.Error())
@@ -64,9 +66,8 @@ func Initfunc() error {
 
 func Handlefunc() macaron.Handler {
 	return func(ctx *macaron.Context) {
-		var namespace []string = []string{setting.JSONConfCtx.Authors.Name(), setting.JSONConfCtx.Notifications.Name}
-
-		for _, name := range namespace {
+		mwname := []string{setting.Auth, setting.JsonConf.Notifications.Name}
+		for _, name := range mwname {
 			if handlerinterface, existed := Middleware[name]; existed {
 				handlerinterface.Handler(ctx)
 			}
