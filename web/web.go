@@ -63,6 +63,7 @@ func SetDockyardMacaron(m *macaron.Macaron) {
 		ossobj.StartOSS()
 	}
 
+	//TODO:
 	if setting.SynMode != "" {
 		if err := synchron.InitSynchron(); err != nil {
 			fmt.Printf("Init synchron error: %s\n", err.Error())

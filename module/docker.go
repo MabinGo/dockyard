@@ -365,12 +365,14 @@ func SaveLayerLocal(srcPath, srcFile, dstPath, dstFile string, reqbody []byte) (
 
 	var data []byte
 	if _, err := os.Stat(srcFile); err == nil {
+		//docker 1.9.x above version saves layer in PATCH methord
 		data, _ = ioutil.ReadFile(srcFile)
 		if err := ioutil.WriteFile(dstFile, data, 0777); err != nil {
 			return 0, err
 		}
 		os.RemoveAll(srcPath)
 	} else {
+		//docker 1.9.x below version saves layer in PUT methord
 		data = reqbody
 		if err := ioutil.WriteFile(dstFile, data, 0777); err != nil {
 			return 0, err

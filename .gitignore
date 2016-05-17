@@ -27,3 +27,5 @@ dockyard
 conf/runtime.conf
 log/*
 data/*
+
+auth
