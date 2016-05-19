@@ -17,7 +17,6 @@ func InitSynchron() error {
 		for {
 			select {
 			case <-timer.C:
-				fmt.Println("####### InitSynchron 0")
 				//create goroutine to distributed images at set intervals
 				for _, region := range models.Regions {
 					if !region.Active {

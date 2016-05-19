@@ -1,8 +1,6 @@
 package models
 
 import (
-	"fmt"
-
 	"github.com/containerops/dockyard/utils/db"
 )
 
@@ -37,15 +35,11 @@ func (rg *Region) Save(namespace, repository, tag string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("####### Region.Save -1: ", exists, rgtmp)
 
-	fmt.Println("####### Region.Save 0: ", exists, *rg)
 	rg.Namespace, rg.Repository, rg.Tag = namespace, repository, tag
 	if !exists {
-		fmt.Println("####### Region.Save 1: ")
 		err = db.Drv.Insert(rg)
 	} else {
-		fmt.Println("####### Region.Save 2: ", *rg)
 		err = db.Drv.Update(rg)
 	}
 

@@ -13,6 +13,7 @@ import (
 	"os"
 
 	"github.com/containerops/dockyard/models"
+	"github.com/containerops/dockyard/utils"
 	"github.com/containerops/dockyard/utils/setting"
 )
 
@@ -180,6 +181,12 @@ func SaveSynContent(namespace, repository, tag string, sc *models.Syncont) error
 		//删除/覆盖本地原来的镜像
 		//TODO :save到对象存储端
 		//setting.Cachable
+		imgpath := GetImagePath(i.ImageId, setting.APIVERSION_V2)
+		if !utils.IsDirExist(imgpath) {
+			if err := os.MkdirAll(imgpath, os.ModePerm); err != nil {
+				return err
+			}
+		}
 		if err := ioutil.WriteFile(i.Path, sc.Layers[i.ImageId], 0777); err != nil {
 			return err
 		}
@@ -251,8 +258,6 @@ func TrigSyn(namespace, repository, tag, dest string) error {
 		return err
 	}
 	rawurl := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
-	fmt.Println("####### TrigSyn 0: ", rawurl)
-	//fmt.Println("####### TrigSyn 1: ", string(body))
 	if _, err := SendHttpRequest("PUT", rawurl, bytes.NewReader(body)); err != nil {
 		return err
 	}
