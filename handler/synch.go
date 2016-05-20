@@ -87,7 +87,7 @@ func PostSynTrigHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 		return http.StatusNotFound, []byte("")
 	}
 
-	if err := module.TrigSyn(namespace, repository, tag, region.Dest); err != nil {
+	if err := module.TrigSynch(namespace, repository, tag, region.Dest); err != nil {
 		log.Error("[REGISTRY API] Failed to trigger syn: %s", err.Error())
 		return http.StatusBadRequest, []byte("")
 	}

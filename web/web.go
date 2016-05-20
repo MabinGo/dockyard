@@ -12,7 +12,7 @@ import (
 	"github.com/containerops/dockyard/models"
 	"github.com/containerops/dockyard/oss"
 	"github.com/containerops/dockyard/router"
-	"github.com/containerops/dockyard/synchron"
+	"github.com/containerops/dockyard/synch"
 	"github.com/containerops/dockyard/utils/db"
 	"github.com/containerops/dockyard/utils/setting"
 )
@@ -65,8 +65,8 @@ func SetDockyardMacaron(m *macaron.Macaron) {
 
 	//TODO:
 	if setting.SynMode != "" {
-		if err := synchron.InitSynchron(); err != nil {
-			fmt.Printf("Init synchron error: %s\n", err.Error())
+		if err := synch.InitSynchron(); err != nil {
+			fmt.Printf("Init synch error: %s\n", err.Error())
 		}
 	}
 }

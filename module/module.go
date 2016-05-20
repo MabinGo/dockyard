@@ -245,7 +245,7 @@ func FillSynContent(namespace, repository, tag string, sc *models.Syncont) error
 	return nil
 }
 
-func TrigSyn(namespace, repository, tag, dest string) error {
+func TrigSynch(namespace, repository, tag, dest string) error {
 	sc := new(models.Syncont)
 	sc.Layers = make(map[string][]byte)
 	if err := FillSynContent(namespace, repository, tag, sc); err != nil {

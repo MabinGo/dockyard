@@ -1,4 +1,4 @@
-package synchron
+package synch
 
 import (
 	"fmt"
@@ -23,7 +23,7 @@ func InitSynchron() error {
 						continue
 					}
 
-					if err := module.TrigSyn(region.Namespace, region.Repository, region.Tag, region.Dest); err != nil {
+					if err := module.TrigSynch(region.Namespace, region.Repository, region.Tag, region.Dest); err != nil {
 						fmt.Printf("Syn %s/%s/%s error: %s", region.Namespace, region.Repository, region.Tag, err.Error())
 						continue
 					}

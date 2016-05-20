@@ -133,13 +133,9 @@ func SetRouters(m *macaron.Macaron) {
 	//TODO
 	//images distributed
 	m.Group("/syn", func() {
-		//接收注册同步分发镜像区域
-		//json body: {"region":"Asia","dest":"http://containerops.me:8080"}
 		m.Post("/:namespace/:repository/:tag/register", handler.PostSynRegionHandler)
-		m.Put("/:namespace/:repository/:tag/content", handler.PutSynContentHandler)
-
-		//主动触发同步
 		m.Post("/:namespace/:repository/:tag/trig", handler.PostSynTrigHandler)
+		m.Put("/:namespace/:repository/:tag/content", handler.PutSynContentHandler)
 
 		//Query API
 		//...

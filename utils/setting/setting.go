@@ -577,7 +577,7 @@ func setSynchronConfig(conf config.Configer) error {
 		}
 	case "priority":
 	default:
-		err = fmt.Errorf("Not support synchron mode %v", SynMode)
+		err = fmt.Errorf("Not support synch mode %v", SynMode)
 	}
 
 	return err
