@@ -4,14 +4,25 @@ import (
 	"github.com/containerops/dockyard/utils/db"
 )
 
+//distribution region
 type Region struct {
-	Id         int64  `json:"id,omitempty" orm:"auto"`
-	Namespace  string `json:"namespace,omitempty" orm:"null;varchar(255)"`
-	Repository string `json:"repository,omitempty" orm:"null;varchar(255)"`
-	Tag        string `json:"tag,omitempty" orm:"null;varchar(255)"`
-	Region     string `json:"region" orm:"unique;null;varchar(255)"`
-	Dest       string `json:"dest" orm:"unique;null;varchar(255)"` //TODO:要考虑支持组的概念
-	Active     bool   `json:"active,omitempty" orm:"null;default(0)"`
+	Id           int64  `json:"id,omitempty" orm:"auto"`
+	Namespace    string `json:"namespace,omitempty" orm:"null;varchar(255)"`
+	Repository   string `json:"repository,omitempty" orm:"null;varchar(255)"`
+	Tag          string `json:"tag,omitempty" orm:"null;varchar(255)"`
+	Endpointlist string `json:"endpointlist" orm:"null;type(text)"` //orm fk is invalid
+}
+
+type Endpoint struct {
+	Area   string `json:"area"`
+	Name   string `json:"name"`
+	URL    string `json:"url"`
+	Active bool   `json:"active,omitempty"`
+}
+
+//format of register region
+type Endpointgrp struct {
+	Endpoints []Endpoint `json:"endpoints"`
 }
 
 type Syncont struct {

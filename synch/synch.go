@@ -19,16 +19,16 @@ func InitSynchron() error {
 			case <-timer.C:
 				//create goroutine to distributed images at set intervals
 				for _, region := range models.Regions {
-					if !region.Active {
-						continue
-					}
+					//if !region.Active {
+					//	continue
+					//}
 
-					if err := module.TrigSynch(region.Namespace, region.Repository, region.Tag, region.Dest); err != nil {
+					if err := module.TrigSynch(region.Namespace, region.Repository, region.Tag, "region.Dest"); err != nil {
 						fmt.Printf("Syn %s/%s/%s error: %s", region.Namespace, region.Repository, region.Tag, err.Error())
 						continue
 					}
 					//TODO: 考虑怎么存region
-					region.Active = false
+					//region.Active = false
 				}
 			}
 		}

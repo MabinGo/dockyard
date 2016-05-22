@@ -96,7 +96,13 @@ func SendHttpRequest(methord, rawurl string, body io.Reader) (*http.Response, er
 }
 
 //TODO: 考虑并发情况，同步过程中有push或pull操作
-func SaveSynContent(namespace, repository, tag string, sc *models.Syncont) error {
+func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
+	sc := new(models.Syncont)
+	sc.Layers = make(map[string][]byte)
+	if err := json.Unmarshal(reqbody, sc); err != nil {
+		return err
+	}
+
 	//cover repo
 	r := new(models.Repository)
 	existed, err := r.Get(namespace, repository)
@@ -258,9 +264,63 @@ func TrigSynch(namespace, repository, tag, dest string) error {
 		return err
 	}
 	rawurl := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
+	fmt.Println("####### TrigSynch 0: ")
 	if _, err := SendHttpRequest("PUT", rawurl, bytes.NewReader(body)); err != nil {
+		fmt.Println("####### TrigSynch 1: ")
 		return err
 	}
+
+	fmt.Println("####### TrigSynch 2: ")
+	return nil
+}
+
+func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error {
+	egin := new(models.Endpointgrp)
+	if err := json.Unmarshal(reqbody, egin); err != nil {
+		return err
+	}
+
+	re := new(models.Region)
+	if existed, err := re.Get(namespace, repository, tag); err != nil {
+		return err
+	} else if !existed {
+		for k, _ := range egin.Endpoints {
+			egin.Endpoints[k].Active = true
+		}
+		result, _ := json.Marshal(egin)
+		re.Namespace, re.Repository, re.Tag, re.Endpointlist =
+			namespace, repository, tag, string(result)
+	} else {
+		egorig := new(models.Endpointgrp)
+		if err := json.Unmarshal([]byte(re.Endpointlist), egorig); err != nil {
+			return err
+		}
+
+		for _, epin := range egin.Endpoints {
+			exists := false
+			for k, _ := range egorig.Endpoints {
+				if epin.URL == egorig.Endpoints[k].URL {
+					exists = true
+					egorig.Endpoints[k].Active = true
+					break
+				}
+			}
+
+			if !exists {
+				epin.Active = true
+				egorig.Endpoints = append(egorig.Endpoints, epin)
+			}
+		}
+
+		result, _ := json.Marshal(egorig)
+		re.Endpointlist = string(result)
+	}
+
+	if err := re.Save(namespace, repository, tag); err != nil {
+		return err
+	}
+	//TODO: mutex
+	models.Regions = append(models.Regions, *re)
 
 	return nil
 }
