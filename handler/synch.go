@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"encoding/json"
+	//"encoding/json"
 	"net/http"
 
 	"github.com/astaxie/beego/logs"
@@ -64,37 +64,43 @@ func PostSynTrigHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 		return http.StatusNotFound, []byte("")
 	}
 
-	epg := new(models.Endpointgrp)
-	if err := json.Unmarshal([]byte(region.Endpointlist), epg); err != nil {
-		log.Error("[REGISTRY API] Failed to unmarshal: %s", err.Error())
+	if err := module.TrigSynEndpoint(region); err != nil {
+		log.Error("[REGISTRY API] Failed to synchronize endpoint: %s", err.Error())
 		return http.StatusInternalServerError, []byte("")
 	}
 
-	success := true
-	for k, _ := range epg.Endpoints {
-		if epg.Endpoints[k].Active == false {
-			continue
+	/*
+		epg := new(models.Endpointgrp)
+		if err := json.Unmarshal([]byte(region.Endpointlist), epg); err != nil {
+			log.Error("[REGISTRY API] Failed to unmarshal: %s", err.Error())
+			return http.StatusInternalServerError, []byte("")
 		}
 
-		if err := module.TrigSynch(namespace, repository, tag, epg.Endpoints[k].URL); err != nil {
-			success = false
-			log.Error("[REGISTRY API] Failed to synchronize %s: %s", epg.Endpoints[k].URL, err.Error())
-			//return http.StatusBadRequest, []byte("")
-		} else {
-			epg.Endpoints[k].Active = false
+		success := true
+		for k, _ := range epg.Endpoints {
+			if epg.Endpoints[k].Active == false {
+				continue
+			}
+
+			if err := module.TrigSynch(namespace, repository, tag, epg.Endpoints[k].URL); err != nil {
+				success = false
+				log.Error("[REGISTRY API] Failed to synchronize %s: %s", epg.Endpoints[k].URL, err.Error())
+				continue
+			} else {
+				epg.Endpoints[k].Active = false
+			}
 		}
-	}
 
-	result, _ := json.Marshal(epg)
-	region.Endpointlist = string(result)
-	if err := region.Save(namespace, repository, tag); err != nil {
-		log.Error("[REGISTRY API] Failed to save syn content: %s", err.Error())
-		return http.StatusInternalServerError, []byte("")
-	}
+		result, _ := json.Marshal(epg)
+		region.Endpointlist = string(result)
+		if err := region.Save(namespace, repository, tag); err != nil {
+			log.Error("[REGISTRY API] Failed to save syn content: %s", err.Error())
+			return http.StatusInternalServerError, []byte("")
+		}
 
-	if !success {
-		return http.StatusInternalServerError, []byte("")
-	}
-
+		if !success {
+			return http.StatusInternalServerError, []byte("")
+		}
+	*/
 	return http.StatusOK, []byte("")
 }

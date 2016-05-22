@@ -18,17 +18,36 @@ func InitSynchron() error {
 			select {
 			case <-timer.C:
 				//create goroutine to distributed images at set intervals
-				for _, region := range models.Regions {
-					//if !region.Active {
-					//	continue
-					//}
-
-					if err := module.TrigSynch(region.Namespace, region.Repository, region.Tag, "region.Dest"); err != nil {
-						fmt.Printf("Syn %s/%s/%s error: %s", region.Namespace, region.Repository, region.Tag, err.Error())
-						continue
+				for _, r := range models.Regions { //TODO: 不能用全局数组
+					if err := module.TrigSynEndpoint(&r); err != nil {
+						fmt.Printf("Synchronize %s/%s/%s error: %s", r.Namespace, r.Repository, r.Tag, err.Error())
 					}
-					//TODO: 考虑怎么存region
-					//region.Active = false
+					/*
+						epg := new(models.Endpointgrp)
+						if err := json.Unmarshal([]byte(r.Endpointlist), epg); err != nil {
+							fmt.Printf("Synchronize %s/%s/%s error: %s", r.Namespace, r.Repository, r.Tag, err.Error())
+							continue
+						}
+
+						for k, _ := range epg.Endpoints {
+							if epg.Endpoints[k].Active == false {
+								continue
+							}
+
+							if err := module.TrigSynch(r.Namespace, r.Repository, r.Tag, epg.Endpoints[k].URL); err != nil {
+								fmt.Printf("Synchronize %s/%s/%s error: %s", r.Namespace, r.Repository, r.Tag, err.Error())
+								continue
+							} else {
+								epg.Endpoints[k].Active = false
+							}
+						}
+						result, _ := json.Marshal(epg)
+						r.Endpointlist = string(result)
+						if err := r.Save(namespace, repository, tag); err != nil {
+							fmt.Printf("Synchronize %s/%s/%s status error: %s", r.Namespace, r.Repository, r.Tag, err.Error())
+							continue
+						}
+					*/
 				}
 			}
 		}

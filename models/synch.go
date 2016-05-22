@@ -33,7 +33,8 @@ type Syncont struct {
 }
 
 var Regions = []Region{}
-var SynConts = []Syncont{}
+
+//var SynConts = []Syncont{}
 
 func (rg *Region) Get(namespace, repository, tag string) (bool, error) {
 	rg.Namespace, rg.Repository, rg.Tag = namespace, repository, tag

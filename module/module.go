@@ -246,7 +246,7 @@ func FillSynContent(namespace, repository, tag string, sc *models.Syncont) error
 		}
 	}
 
-	models.SynConts = append(models.SynConts, *sc)
+	//models.SynConts = append(models.SynConts, *sc)
 
 	return nil
 }
@@ -265,9 +265,11 @@ func TrigSynch(namespace, repository, tag, dest string) error {
 	}
 	rawurl := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
 	fmt.Println("####### TrigSynch 0: ")
-	if _, err := SendHttpRequest("PUT", rawurl, bytes.NewReader(body)); err != nil {
+	if resp, err := SendHttpRequest("PUT", rawurl, bytes.NewReader(body)); err != nil {
 		fmt.Println("####### TrigSynch 1: ")
 		return err
+	} else if resp.StatusCode != 200 {
+		return fmt.Errorf("response code %v", resp.StatusCode)
 	}
 
 	fmt.Println("####### TrigSynch 2: ")
@@ -321,6 +323,44 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 	}
 	//TODO: mutex
 	models.Regions = append(models.Regions, *re)
+
+	return nil
+}
+
+func TrigSynEndpoint(region *models.Region) error {
+	epg := new(models.Endpointgrp)
+	if err := json.Unmarshal([]byte(region.Endpointlist), epg); err != nil {
+		return err
+	}
+
+	errCnt := 0
+	for k, _ := range epg.Endpoints {
+		if epg.Endpoints[k].Active == false {
+			continue
+		}
+		//TODO: goroutine
+		if err := TrigSynch(region.Namespace, region.Repository, region.Tag, epg.Endpoints[k].URL); err != nil {
+			errCnt++
+			fmt.Printf("[REGISTRY API] Failed to synchronize %s: %s", epg.Endpoints[k].URL, err.Error())
+			continue
+		} else {
+			epg.Endpoints[k].Active = false
+		}
+	}
+
+	if len(epg.Endpoints) == errCnt {
+		return fmt.Errorf("all endpoints synchronized failed")
+	}
+
+	result, _ := json.Marshal(epg)
+	region.Endpointlist = string(result)
+	if err := region.Save(region.Namespace, region.Repository, region.Tag); err != nil {
+		return err
+	}
+
+	if errCnt != 0 { //TODO
+		return fmt.Errorf("some synchron failed")
+	}
 
 	return nil
 }
