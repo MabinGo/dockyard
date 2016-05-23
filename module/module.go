@@ -168,8 +168,8 @@ func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
 		i.Ancestry = synimg.Ancestry
 		i.Checksum = synimg.Checksum
 		i.Payload = synimg.Payload
-		i.Checksumed = true
-		i.Uploaded = true
+		i.Checksumed = synimg.Checksumed
+		i.Uploaded = synimg.Uploaded
 		i.Path = GetLayerPath(synimg.ImageId, "layer", setting.APIVERSION_V2)
 		i.Size = synimg.Size
 		i.Version = synimg.Version
