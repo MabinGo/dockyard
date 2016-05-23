@@ -95,7 +95,7 @@ func SendHttpRequest(methord, rawurl string, body io.Reader) (*http.Response, er
 	return resp, nil
 }
 
-//TODO: 考虑并发情况，同步过程中有push或pull操作
+//TODO: must consider parallel, push/pull during synchron
 func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
 	sc := new(models.Syncont)
 	sc.Layers = make(map[string][]byte)
@@ -115,13 +115,12 @@ func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
 	r.Agent = sc.Repository.Agent
 	r.Size = sc.Repository.Size
 	r.Version = sc.Repository.Version
+	r.JSON = sc.Repository.JSON
 	if !existed {
 		r.Tagslist = r.SaveTagslist([]string{tag})
-		r.JSON = sc.Repository.JSON
 		r.Download = 0
 	} else {
-		r.JSON = "" //TODO
-		r.Tagslist = r.SaveTagslist([]string{tag})
+		//r.Tagslist = r.SaveTagslist([]string{tag})
 		exists := false
 		tagslist := r.GetTagslist()
 		for _, v := range tagslist {
@@ -134,8 +133,6 @@ func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
 			tagslist = append(tagslist, tag)
 		}
 		r.Tagslist = r.SaveTagslist(tagslist)
-		//删除原来的metadata
-		//TODO
 	}
 	if err := r.Save(r.Namespace, r.Repository); err != nil {
 		return err
@@ -184,11 +181,10 @@ func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
 			return err
 		}
 
-		//删除/覆盖本地原来的镜像
-		//TODO :save到对象存储端
-		//setting.Cachable
+		//TODO: consider to delete or cover the origin images
 		imgpath := GetImagePath(i.ImageId, setting.APIVERSION_V2)
 		if !utils.IsDirExist(imgpath) {
+			fmt.Println("###### SaveSynContent 00")
 			if err := os.MkdirAll(imgpath, os.ModePerm); err != nil {
 				return err
 			}
@@ -199,6 +195,7 @@ func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
 		tarsumlist = append(tarsumlist, i.ImageId)
 	}
 
+	//upload to oss
 	if err := UploadLayer(tarsumlist); err != nil {
 		return err
 	}
@@ -246,8 +243,6 @@ func FillSynContent(namespace, repository, tag string, sc *models.Syncont) error
 		}
 	}
 
-	//models.SynConts = append(models.SynConts, *sc)
-
 	return nil
 }
 
@@ -264,21 +259,18 @@ func TrigSynch(namespace, repository, tag, dest string) error {
 		return err
 	}
 	rawurl := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
-	fmt.Println("####### TrigSynch 0: ")
 	if resp, err := SendHttpRequest("PUT", rawurl, bytes.NewReader(body)); err != nil {
-		fmt.Println("####### TrigSynch 1: ")
 		return err
 	} else if resp.StatusCode != 200 {
 		return fmt.Errorf("response code %v", resp.StatusCode)
 	}
 
-	fmt.Println("####### TrigSynch 2: ")
 	return nil
 }
 
 func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error {
-	egin := new(models.Endpointgrp)
-	if err := json.Unmarshal(reqbody, egin); err != nil {
+	eplist := new(models.Endpointlist)
+	if err := json.Unmarshal(reqbody, eplist); err != nil {
 		return err
 	}
 
@@ -286,35 +278,34 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 	if existed, err := re.Get(namespace, repository, tag); err != nil {
 		return err
 	} else if !existed {
-		for k, _ := range egin.Endpoints {
-			egin.Endpoints[k].Active = true
+		for k, _ := range eplist.Endpoints {
+			eplist.Endpoints[k].Active = true
 		}
-		result, _ := json.Marshal(egin)
-		re.Namespace, re.Repository, re.Tag, re.Endpointlist =
-			namespace, repository, tag, string(result)
+		result, _ := json.Marshal(eplist)
+		re.Namespace, re.Repository, re.Tag, re.Endpointlist = namespace, repository, tag, string(result)
 	} else {
-		egorig := new(models.Endpointgrp)
-		if err := json.Unmarshal([]byte(re.Endpointlist), egorig); err != nil {
+		eporig := new(models.Endpointlist)
+		if err := json.Unmarshal([]byte(re.Endpointlist), eporig); err != nil {
 			return err
 		}
 
-		for _, epin := range egin.Endpoints {
+		for _, epin := range eplist.Endpoints {
 			exists := false
-			for k, _ := range egorig.Endpoints {
-				if epin.URL == egorig.Endpoints[k].URL {
+			for k, _ := range eporig.Endpoints {
+				if epin.URL == eporig.Endpoints[k].URL {
 					exists = true
-					egorig.Endpoints[k].Active = true
+					eporig.Endpoints[k].Active = true
 					break
 				}
 			}
 
 			if !exists {
 				epin.Active = true
-				egorig.Endpoints = append(egorig.Endpoints, epin)
+				eporig.Endpoints = append(eporig.Endpoints, epin)
 			}
 		}
 
-		result, _ := json.Marshal(egorig)
+		result, _ := json.Marshal(eporig)
 		re.Endpointlist = string(result)
 	}
 
@@ -328,38 +319,43 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 }
 
 func TrigSynEndpoint(region *models.Region) error {
-	epg := new(models.Endpointgrp)
-	if err := json.Unmarshal([]byte(region.Endpointlist), epg); err != nil {
+	eplist := new(models.Endpointlist)
+	if err := json.Unmarshal([]byte(region.Endpointlist), eplist); err != nil {
 		return err
 	}
 
-	errCnt := 0
-	for k, _ := range epg.Endpoints {
-		if epg.Endpoints[k].Active == false {
+	activecnt := 0
+	errs := []string{}
+	for k, _ := range eplist.Endpoints {
+		if eplist.Endpoints[k].Active == false {
+			activecnt++
 			continue
 		}
-		//TODO: goroutine
-		if err := TrigSynch(region.Namespace, region.Repository, region.Tag, epg.Endpoints[k].URL); err != nil {
-			errCnt++
-			fmt.Printf("[REGISTRY API] Failed to synchronize %s: %s", epg.Endpoints[k].URL, err.Error())
+		//TODO: opt to use goroutine
+		if err := TrigSynch(region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL); err != nil {
+			errs = append(errs, fmt.Sprintf("\nsynchronize to %s error: %s.", eplist.Endpoints[k].URL, err.Error()))
 			continue
 		} else {
-			epg.Endpoints[k].Active = false
+			eplist.Endpoints[k].Active = false
 		}
 	}
 
-	if len(epg.Endpoints) == errCnt {
-		return fmt.Errorf("all endpoints synchronized failed")
+	if activecnt == len(eplist.Endpoints) {
+		return fmt.Errorf("no active region")
 	}
 
-	result, _ := json.Marshal(epg)
+	if len(eplist.Endpoints) == len(errs) {
+		return fmt.Errorf("%v", errs)
+	}
+
+	result, _ := json.Marshal(eplist)
 	region.Endpointlist = string(result)
 	if err := region.Save(region.Namespace, region.Repository, region.Tag); err != nil {
 		return err
 	}
 
-	if errCnt != 0 { //TODO
-		return fmt.Errorf("some synchron failed")
+	if len(errs) > 0 {
+		return fmt.Errorf("%v", errs)
 	}
 
 	return nil

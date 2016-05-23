@@ -133,9 +133,10 @@ func SetRouters(m *macaron.Macaron) {
 	//TODO
 	//images distributed
 	m.Group("/syn", func() {
-		m.Post("/:namespace/:repository/:tag/register", handler.PostSynRegionHandler)
-		m.Post("/:namespace/:repository/:tag/trig", handler.PostSynTrigHandler)
+		m.Post("/:namespace/:repository/:tag/region", handler.PostSynRegionHandler)
+		m.Post("/:namespace/:repository/:tag/trigger", handler.PostSynTrigHandler)
 		m.Put("/:namespace/:repository/:tag/content", handler.PutSynContentHandler)
+		//m.Delete("/:namespace/:repository/:tag/region", handler.PostDelRegionHandler)
 
 		//Query API
 		//...

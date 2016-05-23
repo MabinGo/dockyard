@@ -21,7 +21,7 @@ type Endpoint struct {
 }
 
 //format of register region
-type Endpointgrp struct {
+type Endpointlist struct {
 	Endpoints []Endpoint `json:"endpoints"`
 }
 

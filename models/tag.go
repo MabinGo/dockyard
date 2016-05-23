@@ -8,10 +8,10 @@ import (
 
 type Tag struct {
 	Id         int64     `json:"id" orm:"auto"`
-	Namespace  string    `json:"namespace" orm:"varchar(255)"`
-	Repository string    `json:"repository" orm:"varchar(255)"`
-	Tag        string    `json:"tag" orm:"varchar(255)"`
-	ImageId    string    `json:"imageid" orm:"varchar(255)"`
+	Namespace  string    `json:"namespace" orm:"null;varchar(255)"`
+	Repository string    `json:"repository" orm:"null;varchar(255)"`
+	Tag        string    `json:"tag" orm:"null;varchar(255)"`
+	ImageId    string    `json:"imageid" orm:"null;varchar(255)"`
 	Manifest   string    `json:"manifest" orm:"null;type(text)"`
 	Schema     int64     `json:"schema" orm:"default(0)"`
 	Memo       string    `json:"memo" orm:"null;type(text)"`
