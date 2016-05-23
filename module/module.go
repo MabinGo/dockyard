@@ -184,7 +184,6 @@ func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
 		//TODO: consider to delete or cover the origin images
 		imgpath := GetImagePath(i.ImageId, setting.APIVERSION_V2)
 		if !utils.IsDirExist(imgpath) {
-			fmt.Println("###### SaveSynContent 00")
 			if err := os.MkdirAll(imgpath, os.ModePerm); err != nil {
 				return err
 			}
@@ -261,7 +260,7 @@ func TrigSynch(namespace, repository, tag, dest string) error {
 	rawurl := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
 	if resp, err := SendHttpRequest("PUT", rawurl, bytes.NewReader(body)); err != nil {
 		return err
-	} else if resp.StatusCode != 200 {
+	} else if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("response code %v", resp.StatusCode)
 	}
 
@@ -313,7 +312,8 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 		return err
 	}
 	//TODO: mutex
-	models.Regions = append(models.Regions, *re)
+	//models.Regions = append(models.Regions, *re)
+	rt := new(models.RegionTable)
 
 	return nil
 }

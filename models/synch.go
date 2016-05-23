@@ -13,6 +13,11 @@ type Region struct {
 	Endpointlist string `json:"endpointlist" orm:"null;type(text)"` //orm fk is invalid
 }
 
+type RegionTable struct {
+	Id         int64  `json:"id,omitempty" orm:"auto"`
+	Regionlist string `json:"regionlist" orm:"null;type(text)"`
+}
+
 type Endpoint struct {
 	Area   string `json:"area"`
 	Name   string `json:"name"`
@@ -25,6 +30,10 @@ type Endpointlist struct {
 	Endpoints []Endpoint `json:"endpoints"`
 }
 
+type Regionlist struct {
+	Regions []Region `json:"region"`
+}
+
 type Syncont struct {
 	Repository Repository        `json:"repository"`
 	Tag        Tag               `json:"tag"`
@@ -32,9 +41,27 @@ type Syncont struct {
 	Layers     map[string][]byte `json:"layers"`
 }
 
-var Regions = []Region{}
+func (rt *RegionTable) Get(id int64) (bool, error) {
+	rt.Id = id
+	return db.Drv.Get(rt, id)
+}
 
-//var SynConts = []Syncont{}
+func (rt *RegionTable) Save(id int64) error {
+	rttmp := RegionTable{Id: id}
+	exists, err := rttmp.Get(id)
+	if err != nil {
+		return err
+	}
+
+	rt.Id = id
+	if !exists {
+		err = db.Drv.Insert(rt)
+	} else {
+		err = db.Drv.Update(rt)
+	}
+
+	return err
+}
 
 func (rg *Region) Get(namespace, repository, tag string) (bool, error) {
 	rg.Namespace, rg.Repository, rg.Tag = namespace, repository, tag
