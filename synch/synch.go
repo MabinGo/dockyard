@@ -1,9 +1,8 @@
 package synch
 
 import (
+	"encoding/json"
 	"fmt"
-	//"log"
-	//"net/http"
 	"time"
 
 	"github.com/containerops/dockyard/models"
@@ -12,16 +11,43 @@ import (
 )
 
 func InitSynchron() error {
+	rt := new(models.RegionTable)
+	if existes, err := rt.Get(module.RTName); err != nil {
+		return err
+	} else if !existes {
+		if err := rt.Save(module.RTName); err != nil {
+			return err
+		}
+	}
+
 	go func() {
 		timer := time.NewTicker(time.Duration(setting.Interval) * time.Second)
 		for {
 			select {
 			case <-timer.C:
-				//create goroutine to distributed images at set intervals
-				for _, r := range models.Regions { //TODO: 不能用全局数组
-					if err := module.TrigSynEndpoint(&r); err != nil {
-						fmt.Printf("\nSynchronize %s/%s/%s error: %s\n", r.Namespace, r.Repository, r.Tag, err.Error())
+				rt := new(models.RegionTable)
+				if exists, err := rt.Get(module.RTName); err != nil {
+					fmt.Printf("\nDB invalid: %s\n", err.Error())
+					continue
+				} else if exists {
+					if rt.Regionlist == "" {
+						continue
 					}
+
+					rlist := new(models.Regionlist)
+					if err := json.Unmarshal([]byte(rt.Regionlist), rlist); err != nil {
+						fmt.Printf("\nRegion list invalid: %s\n", err.Error())
+						continue
+					}
+
+					//create goroutine to distributed images at set intervals
+					for _, r := range rlist.Regions {
+						if err := module.TrigSynEndpoint(&r); err != nil {
+							fmt.Printf("\nSynchronize %s/%s/%s error: %s\n", r.Namespace, r.Repository, r.Tag, err.Error())
+						}
+					}
+				} else {
+
 				}
 			}
 		}

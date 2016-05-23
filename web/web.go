@@ -21,10 +21,12 @@ func SetDockyardMacaron(m *macaron.Macaron) {
 	if err := db.RegisterDriver(setting.DBDriver); err != nil {
 		fmt.Printf("Register database driver error: %s\n", err.Error())
 	} else {
-		db.Drv.RegisterModel(new(models.Tag), new(models.Image), new(models.Repository),
-			new(dao.Organization), new(dao.User), new(dao.OrganizationUserMap),
-			new(dao.RepositoryEx), new(dao.Team), new(dao.TeamRepositoryMap), new(dao.TeamUserMap),
-			new(models.Region))
+		db.Drv.RegisterModel(new(models.Tag), new(models.Image), new(models.Repository))
+
+		db.Drv.RegisterModel(new(dao.Organization), new(dao.User), new(dao.OrganizationUserMap),
+			new(dao.RepositoryEx), new(dao.Team), new(dao.TeamRepositoryMap), new(dao.TeamUserMap))
+
+		db.Drv.RegisterModel(new(models.Region), new(models.RegionTable))
 
 		if err := db.Drv.InitDB(
 			setting.DBDriver,

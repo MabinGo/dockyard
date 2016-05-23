@@ -17,6 +17,8 @@ import (
 	"github.com/containerops/dockyard/utils/setting"
 )
 
+var RTName string = "RegionTable"
+
 var Apis = []string{"images", "tarsum", "acis"}
 
 func CleanCache(imageId string, apiversion int64) {
@@ -270,6 +272,7 @@ func TrigSynch(namespace, repository, tag, dest string) error {
 func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error {
 	eplist := new(models.Endpointlist)
 	if err := json.Unmarshal(reqbody, eplist); err != nil {
+		fmt.Println("################### 0")
 		return err
 	}
 
@@ -285,6 +288,7 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 	} else {
 		eporig := new(models.Endpointlist)
 		if err := json.Unmarshal([]byte(re.Endpointlist), eporig); err != nil {
+			fmt.Println("################### 1")
 			return err
 		}
 
@@ -311,9 +315,46 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 	if err := re.Save(namespace, repository, tag); err != nil {
 		return err
 	}
+
 	//TODO: mutex
-	//models.Regions = append(models.Regions, *re)
-	rt := new(models.RegionTable)
+	if setting.SynMode != "" {
+		rt := new(models.RegionTable)
+		if exists, err := rt.Get(RTName); err != nil {
+			return err
+		} else if !exists {
+			return fmt.Errorf("region table invalid")
+		}
+
+		//TODO: bug
+		if rt.Regionlist != "" {
+			rl := new(models.Regionlist)
+			if err := json.Unmarshal([]byte(rt.Regionlist), rl); err != nil {
+				fmt.Println("################### 2")
+				return err
+			}
+
+			exists := false
+			index := 0
+			for k, v := range rl.Regions {
+				if v.Id == re.Id {
+					exists = true
+					index = k
+					break
+				}
+			}
+
+			if !exists {
+				rl.Regions = append(rl.Regions, *re)
+			} else {
+				rl.Regions[index] = *re
+			}
+		}
+		result, _ := json.Marshal(rl)
+		rt.Regionlist = string(result)
+		if err := rt.Save(RTName); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -352,6 +393,42 @@ func TrigSynEndpoint(region *models.Region) error {
 	region.Endpointlist = string(result)
 	if err := region.Save(region.Namespace, region.Repository, region.Tag); err != nil {
 		return err
+	}
+
+	if setting.SynMode != "" {
+		rt := new(models.RegionTable)
+		if exists, err := rt.Get(RTName); err != nil {
+			return err
+		} else if !exists {
+			return fmt.Errorf("region table invalid")
+		}
+
+		rl := new(models.Regionlist)
+		if err := json.Unmarshal([]byte(rt.Regionlist), rl); err != nil {
+			return err
+		}
+
+		exists := false
+		index := 0
+		for k, v := range rl.Regions {
+			if v.Id == region.Id {
+				exists = true
+				index = k
+				break
+			}
+		}
+
+		if !exists {
+			return fmt.Errorf("region table invalid")
+		} else {
+			rl.Regions[index] = *region
+		}
+
+		result, _ := json.Marshal(rl)
+		rt.Regionlist = string(result)
+		if err := rt.Save(RTName); err != nil {
+			return err
+		}
 	}
 
 	if len(errs) > 0 {

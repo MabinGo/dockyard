@@ -14,7 +14,8 @@ type Region struct {
 }
 
 type RegionTable struct {
-	Id         int64  `json:"id,omitempty" orm:"auto"`
+	Id         int64  `json:"id" orm:"auto"`
+	Name       string `json:"name" orm:"null;varchar(255)"`
 	Regionlist string `json:"regionlist" orm:"null;type(text)"`
 }
 
@@ -41,19 +42,19 @@ type Syncont struct {
 	Layers     map[string][]byte `json:"layers"`
 }
 
-func (rt *RegionTable) Get(id int64) (bool, error) {
-	rt.Id = id
-	return db.Drv.Get(rt, id)
+func (rt *RegionTable) Get(name string) (bool, error) {
+	rt.Name = name
+	return db.Drv.Get(rt, name)
 }
 
-func (rt *RegionTable) Save(id int64) error {
-	rttmp := RegionTable{Id: id}
-	exists, err := rttmp.Get(id)
+func (rt *RegionTable) Save(name string) error {
+	rttmp := RegionTable{Name: name}
+	exists, err := rttmp.Get(name)
 	if err != nil {
 		return err
 	}
 
-	rt.Id = id
+	rt.Name = name
 	if !exists {
 		err = db.Drv.Insert(rt)
 	} else {
