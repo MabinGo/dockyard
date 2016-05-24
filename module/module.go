@@ -325,9 +325,8 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 			return fmt.Errorf("region table invalid")
 		}
 
-		//TODO: bug
+		rl := new(models.Regionlist)
 		if rt.Regionlist != "" {
-			rl := new(models.Regionlist)
 			if err := json.Unmarshal([]byte(rt.Regionlist), rl); err != nil {
 				fmt.Println("################### 2")
 				return err
@@ -348,9 +347,13 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 			} else {
 				rl.Regions[index] = *re
 			}
+		} else {
+			//rl := new(models.Regionlist)
+			rl.Regions = append(rl.Regions, *re)
 		}
 		result, _ := json.Marshal(rl)
 		rt.Regionlist = string(result)
+
 		if err := rt.Save(RTName); err != nil {
 			return err
 		}
