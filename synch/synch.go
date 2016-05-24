@@ -43,8 +43,11 @@ func InitSynchron() error {
 					//create goroutine to distributed images at set intervals
 					for _, r := range rlist.Regions {
 						if err := module.TrigSynEndpoint(&r); err != nil {
-							fmt.Printf("\nSynchronize %s/%s/%s error: %s\n", r.Namespace, r.Repository, r.Tag, err.Error())
+							fmt.Printf("\nSynchronize %s/%s/%s error: %s", r.Namespace, r.Repository, r.Tag, err.Error())
 						}
+						//else {
+						//	fmt.Printf("\nSynchronize %s/%s/%s successfully", r.Namespace, r.Repository, r.Tag)
+						//}
 					}
 				} else {
 

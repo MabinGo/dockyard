@@ -272,7 +272,6 @@ func TrigSynch(namespace, repository, tag, dest string) error {
 func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error {
 	eplist := new(models.Endpointlist)
 	if err := json.Unmarshal(reqbody, eplist); err != nil {
-		fmt.Println("################### 0")
 		return err
 	}
 
@@ -288,7 +287,6 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 	} else {
 		eporig := new(models.Endpointlist)
 		if err := json.Unmarshal([]byte(re.Endpointlist), eporig); err != nil {
-			fmt.Println("################### 1")
 			return err
 		}
 
@@ -328,7 +326,6 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 		rl := new(models.Regionlist)
 		if rt.Regionlist != "" {
 			if err := json.Unmarshal([]byte(rt.Regionlist), rl); err != nil {
-				fmt.Println("################### 2")
 				return err
 			}
 
@@ -377,17 +374,18 @@ func TrigSynEndpoint(region *models.Region) error {
 		}
 		//TODO: opt to use goroutine
 		if err := TrigSynch(region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL); err != nil {
-			errs = append(errs, fmt.Sprintf("\nsynchronize to %s error: %s.", eplist.Endpoints[k].URL, err.Error()))
+			errs = append(errs, fmt.Sprintf("\nsynchronize to %s error: %s", eplist.Endpoints[k].URL, err.Error()))
 			continue
 		} else {
 			eplist.Endpoints[k].Active = false
+			//fmt.Printf("\nsynchronize to %s successfully\n", eplist.Endpoints[k].URL)
 		}
 	}
-
-	if activecnt == len(eplist.Endpoints) {
-		return fmt.Errorf("no active region")
-	}
-
+	/*
+		if activecnt == len(eplist.Endpoints) {
+			fmt.Printf("no active region")
+		}
+	*/
 	if len(eplist.Endpoints) == len(errs) {
 		return fmt.Errorf("%v", errs)
 	}
