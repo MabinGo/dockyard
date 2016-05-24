@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/containerops/dockyard/middleware"
 	"github.com/containerops/dockyard/models"
+	"github.com/containerops/dockyard/module"
 	"github.com/containerops/dockyard/utils/setting"
 )
 
@@ -88,14 +90,16 @@ func (a *authorization) Handler(ctx *macaron.Context) {
 }
 
 //add for IT department
-func cmdReqHandler(ctx *macaron.Context) (bool, error) {
-	var repo string
-	var accessRecords []Access
+var ignore = false
 
+func cmdReqHandler(ctx *macaron.Context) (bool, error) {
+	if ignore == true {
+		return false, nil
+	}
+	//filter docker client request
 	if strings.Compare(ctx.Req.RequestURI, "/v2/") == 0 {
 		return true, nil
 	}
-
 	author := ctx.Req.Header.Get("Authorization")
 	parts := strings.Split(author, " ")
 	partslen := len(parts)
@@ -108,21 +112,21 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 		return false, fmt.Errorf("invalid user name or password")
 	}
 
-	client := &http.Client{}
-
-	//TODO: consider to solve domains/repo
+	//TODO: it will solve domains/repo format soon
 	namespace := ctx.Params(":namespace")
 	repository := ctx.Params(":repository")
 
-	w := ctx.Resp
-	r := ctx.Req.Request
+	realbody, _ := ctx.Req.Body().Bytes()
 
+	var repo string
+	var accessRecords []Access
+
+	r := ctx.Req.Request
 	if namespace == "" || repository == "" {
 		repo = ""
 	} else {
 		repo = fmt.Sprintf("%v/%v", namespace, repository)
 	}
-
 	if repo != "" {
 		accessRecords = appendAccessRecords(accessRecords, r.Method, repo)
 		if fromRepo := r.FormValue("from"); fromRepo != "" {
@@ -166,11 +170,12 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 	}
 
 	params := fmt.Sprintf("?account=%v&scope=%v:%v:%v&service=%v&%v", account, typ, name, action, service, isdel)
-
 	methord := r.Method
-	if methord != "GET" && methord != "DELETE" {
-		return false, fmt.Errorf("not support request methord: %v", methord)
+	if methord != "DELETE" {
+		methord = "GET"
 	}
+
+	client := &http.Client{}
 	req, err := http.NewRequest(methord, realm+params, nil)
 	if err != nil {
 		return false, err
@@ -193,17 +198,19 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 	if err = json.Unmarshal(body, &token); err != nil {
 		return false, err
 	}
-
 	bearer := "Bearer" + " " + token["token"]
 	if _, err := accessControllers[setting.Authmode].Authorized(bearer, accessRecords...); err != nil {
-		switch err := err.(type) {
-		case Challenge:
-			err.SetHeaders(w)
-		default:
-			w.WriteHeader(http.StatusBadRequest)
-		}
-
 		return false, err
+	}
+
+	if len(realbody) > 0 {
+		ignore = true
+		realurl := fmt.Sprintf("%s://%s%s", setting.ListenMode, setting.Domains, ctx.Req.RequestURI)
+		if _, err := module.SendHttpRequest(r.Method, realurl, bytes.NewReader(realbody)); err != nil {
+			return false, err
+		}
+		defer resp.Body.Close()
+		ignore = false
 	}
 
 	return false, nil

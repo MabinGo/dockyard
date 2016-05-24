@@ -42,22 +42,6 @@ func PostSynRegionHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 	return http.StatusOK, []byte("")
 }
 
-func PutSynContentHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
-	namespace := ctx.Params(":namespace")
-	repository := ctx.Params(":repository")
-	tag := ctx.Params(":tag")
-
-	body, _ := ctx.Req.Body().Bytes()
-	if err := module.SaveSynContent(namespace, repository, tag, body); err != nil {
-		log.Error("[REGISTRY API] Failed to save syn content: %s", err.Error())
-
-		result, _ := json.Marshal(map[string]string{"message": "Failed to save synchron content"})
-		return http.StatusInternalServerError, result
-	}
-
-	return http.StatusOK, []byte("")
-}
-
 func PostSynTrigHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	namespace := ctx.Params(":namespace")
 	repository := ctx.Params(":repository")
@@ -80,6 +64,22 @@ func PostSynTrigHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 		log.Error("[REGISTRY API] Failed to synchron: %s", err.Error())
 
 		result, _ := json.Marshal(map[string]string{"message": "Failed to synchron"})
+		return http.StatusInternalServerError, result
+	}
+
+	return http.StatusOK, []byte("")
+}
+
+func PutSynContentHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+	tag := ctx.Params(":tag")
+
+	body, _ := ctx.Req.Body().Bytes()
+	if err := module.SaveSynContent(namespace, repository, tag, body); err != nil {
+		log.Error("[REGISTRY API] Failed to save syn content: %s", err.Error())
+
+		result, _ := json.Marshal(map[string]string{"message": "Failed to save synchron content"})
 		return http.StatusInternalServerError, result
 	}
 
