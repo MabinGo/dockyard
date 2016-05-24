@@ -295,6 +295,7 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 			for k, _ := range eporig.Endpoints {
 				if epin.URL == eporig.Endpoints[k].URL {
 					exists = true
+					eporig.Endpoints[k] = epin
 					eporig.Endpoints[k].Active = true
 					break
 				}
