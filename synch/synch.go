@@ -7,6 +7,7 @@ import (
 
 	"github.com/containerops/dockyard/models"
 	"github.com/containerops/dockyard/module"
+	"github.com/containerops/dockyard/utils"
 	"github.com/containerops/dockyard/utils/setting"
 )
 
@@ -20,8 +21,10 @@ func InitSynchron() error {
 		}
 	}
 
+	authorization := "Basic " + utils.EncodeBasicAuth(setting.SynUser, setting.SynPasswd)
+
 	go func() {
-		timer := time.NewTicker(time.Duration(setting.Interval) * time.Second)
+		timer := time.NewTicker(time.Duration(setting.SynInterval) * time.Second)
 		for {
 			select {
 			case <-timer.C:
@@ -42,7 +45,7 @@ func InitSynchron() error {
 
 					//create goroutine to distributed images at set intervals
 					for _, r := range rlist.Regions {
-						if err := module.TrigSynEndpoint(&r); err != nil {
+						if err := module.TrigSynEndpoint(&r, authorization); err != nil {
 							fmt.Printf("\nSynchronize %s/%s/%s error: %s", r.Namespace, r.Repository, r.Tag, err.Error())
 						}
 						//else {

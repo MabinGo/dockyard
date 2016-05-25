@@ -46,6 +46,7 @@ func PostSynTrigHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 	namespace := ctx.Params(":namespace")
 	repository := ctx.Params(":repository")
 	tag := ctx.Params(":tag")
+	auth := ctx.Req.Header.Get("Authorization")
 
 	region := new(models.Region)
 	if existed, err := region.Get(namespace, repository, tag); err != nil {
@@ -60,7 +61,7 @@ func PostSynTrigHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 		return http.StatusNotFound, result
 	}
 
-	if err := module.TrigSynEndpoint(region); err != nil {
+	if err := module.TrigSynEndpoint(region, auth); err != nil {
 		log.Error("[REGISTRY API] Failed to synchron: %s", err.Error())
 
 		result, _ := json.Marshal(map[string]string{"message": "Failed to synchron"})

@@ -98,6 +98,7 @@ func SetRouters(m *macaron.Macaron) {
 		//Authorization service
 		m.Get("/auth", controller.GetAuthorize)
 		m.Delete("/auth", controller.DeleteAuthorize)
+		m.Post("/auth", controller.PostAuthorize)
 
 		//user
 		m.Group("/user", func() {

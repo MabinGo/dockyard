@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -90,12 +89,7 @@ func (a *authorization) Handler(ctx *macaron.Context) {
 }
 
 //add for IT department
-var ignore = false
-
 func cmdReqHandler(ctx *macaron.Context) (bool, error) {
-	if ignore == true {
-		return false, nil
-	}
 	//filter docker client request
 	if strings.Compare(ctx.Req.RequestURI, "/v2/") == 0 {
 		return true, nil
@@ -112,15 +106,13 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 		return false, fmt.Errorf("invalid user name or password")
 	}
 
-	//TODO: it will solve domains/repo format soon
-	namespace := ctx.Params(":namespace")
-	repository := ctx.Params(":repository")
-
-	realbody, _ := ctx.Req.Body().Bytes()
-
+	//TODO: support domains/repo format soon
 	var repo string
 	var accessRecords []Access
 
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+	w := ctx.Resp
 	r := ctx.Req.Request
 	if namespace == "" || repository == "" {
 		repo = ""
@@ -129,9 +121,6 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 	}
 	if repo != "" {
 		accessRecords = appendAccessRecords(accessRecords, r.Method, repo)
-		if fromRepo := r.FormValue("from"); fromRepo != "" {
-			accessRecords = appendAccessRecords(accessRecords, "GET", fromRepo)
-		}
 	} else {
 		if nameRequired(r) {
 			return false, fmt.Errorf("name required")
@@ -139,6 +128,7 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 		accessRecords = appendCatalogAccessRecord(accessRecords, r)
 	}
 
+	var isdel string
 	acclen := len(accessRecords)
 	if acclen <= 0 {
 		return false, fmt.Errorf("bad access")
@@ -152,8 +142,6 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 	}
 	service := setting.Service
 	realm := setting.Realm
-
-	var isdel string
 	if r.Method == "DELETE" && ctx.Params(":reference") != "" {
 		rep := new(models.Repository)
 		if exists, err := rep.Get(namespace, repository); err != nil {
@@ -168,26 +156,24 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 			isdel = "delete=false"
 		}
 	}
+	params := fmt.Sprintf("?account=%v&scope=%v:%v:%v&service=%v&%v",
+		account, typ, name, action, service, isdel)
 
-	params := fmt.Sprintf("?account=%v&scope=%v:%v:%v&service=%v&%v", account, typ, name, action, service, isdel)
-	methord := r.Method
-	if methord != "DELETE" {
-		methord = "GET"
+	authType := r.Method
+	switch authType {
+	case "GET", "HEAD":
+		authType = "GET"
+	case "DELETE":
+	case "POST", "PUT", "PATCH":
+		authType = "POST"
+	default:
+		return false, fmt.Errorf("not support auth type %s", authType)
 	}
 
-	client := &http.Client{}
-	req, err := http.NewRequest(methord, realm+params, nil)
+	resp, err := module.SendHttpRequest(authType, realm+params, nil, author)
 	if err != nil {
 		return false, err
 	}
-	req.URL.RawQuery = req.URL.Query().Encode()
-	req.Header.Set("Authorization", author)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -200,17 +186,14 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 	}
 	bearer := "Bearer" + " " + token["token"]
 	if _, err := accessControllers[setting.Authmode].Authorized(bearer, accessRecords...); err != nil {
-		return false, err
-	}
-
-	if len(realbody) > 0 {
-		ignore = true
-		realurl := fmt.Sprintf("%s://%s%s", setting.ListenMode, setting.Domains, ctx.Req.RequestURI)
-		if _, err := module.SendHttpRequest(r.Method, realurl, bytes.NewReader(realbody)); err != nil {
-			return false, err
+		switch err := err.(type) {
+		case Challenge:
+			err.SetHeaders(w)
+		default:
+			w.WriteHeader(http.StatusBadRequest)
 		}
-		defer resp.Body.Close()
-		ignore = false
+
+		return false, err
 	}
 
 	return false, nil

@@ -553,29 +553,31 @@ func setAuthConfig(conf config.Configer) error {
 
 //TODO
 var (
-	SynMode  string
-	Interval int64
+	SynMode     string
+	SynUser     string
+	SynPasswd   string
+	SynInterval int64
 )
 
 func setSynchronConfig(conf config.Configer) error {
-	//TODO:
 	var err error = nil
 
-	if synmode := conf.String("dockyard::synmode"); synmode != "" {
-		SynMode = synmode
-	}
-
+	SynMode = conf.String("dockyard::synmode")
 	switch SynMode {
 	case "":
 	case "poll":
-		if Interval, err = conf.Int64(SynMode + "::" + "interval"); err != nil {
-			err = fmt.Errorf("polling interval config value error")
+		if SynInterval, err = conf.Int64(SynMode + "::" + "syninterval"); err != nil || SynInterval <= 0 {
+			err = fmt.Errorf("polling syninterval config value error")
 		}
 
-		if Interval <= 0 {
-			err = fmt.Errorf("polling interval is not correct")
+		if SynUser = conf.String(SynMode + "::" + "synuser"); SynUser == "" {
+			err = fmt.Errorf("synuser value is null")
 		}
-	case "priority":
+
+		if SynPasswd = conf.String(SynMode + "::" + "synpasswd"); SynPasswd == "" {
+			err = fmt.Errorf("synpasswd value is null")
+		}
+	//case "priority":
 	default:
 		err = fmt.Errorf("Not support synch mode %v", SynMode)
 	}

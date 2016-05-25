@@ -46,7 +46,7 @@ func GetLayerPath(imageId, layerfile string, apiversion int64) string {
 	return fmt.Sprintf("%v/%v/%v/%v", setting.ImagePath, Apis[apiversion], imageId, layerfile)
 }
 
-func SendHttpRequest(methord, rawurl string, body io.Reader) (*http.Response, error) {
+func SendHttpRequest(methord, rawurl string, body io.Reader, auth string) (*http.Response, error) {
 	url, err := url.Parse(rawurl)
 	if err != nil {
 		return &http.Response{}, err
@@ -80,7 +80,7 @@ func SendHttpRequest(methord, rawurl string, body io.Reader) (*http.Response, er
 		return &http.Response{}, err
 	}
 	req.URL.RawQuery = req.URL.Query().Encode()
-	//req.Header.Set("Authorization", author)
+	req.Header.Set("Authorization", auth)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -240,7 +240,7 @@ func FillSynContent(namespace, repository, tag string, sc *models.Syncont) error
 	return nil
 }
 
-func TrigSynch(namespace, repository, tag, dest string) error {
+func TrigSynch(namespace, repository, tag, auth, dest string) error {
 	sc := new(models.Syncont)
 	sc.Layers = make(map[string][]byte)
 	if err := FillSynContent(namespace, repository, tag, sc); err != nil {
@@ -253,7 +253,7 @@ func TrigSynch(namespace, repository, tag, dest string) error {
 		return err
 	}
 	rawurl := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
-	if resp, err := SendHttpRequest("PUT", rawurl, bytes.NewReader(body)); err != nil {
+	if resp, err := SendHttpRequest("PUT", rawurl, bytes.NewReader(body), auth); err != nil {
 		return err
 	} else if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("response code %v", resp.StatusCode)
@@ -353,7 +353,7 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 	return nil
 }
 
-func TrigSynEndpoint(region *models.Region) error {
+func TrigSynEndpoint(region *models.Region, auth string) error {
 	eplist := new(models.Endpointlist)
 	if err := json.Unmarshal([]byte(region.Endpointlist), eplist); err != nil {
 		return err
@@ -367,7 +367,7 @@ func TrigSynEndpoint(region *models.Region) error {
 			continue
 		}
 		//TODO: opt to use goroutine
-		if err := TrigSynch(region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL); err != nil {
+		if err := TrigSynch(region.Namespace, region.Repository, region.Tag, auth, eplist.Endpoints[k].URL); err != nil {
 			errs = append(errs, fmt.Sprintf("\nsynchronize to %s error: %s", eplist.Endpoints[k].URL, err.Error()))
 			continue
 		} else {
