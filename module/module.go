@@ -49,7 +49,6 @@ func GetLayerPath(imageId, layerfile string, apiversion int64) string {
 func SendHttpRequest(methord, rawurl string, body io.Reader) (*http.Response, error) {
 	url, err := url.Parse(rawurl)
 	if err != nil {
-		fmt.Println("####### SendHttpRequest 0: ", err.Error())
 		return &http.Response{}, err
 	}
 
@@ -58,11 +57,9 @@ func SendHttpRequest(methord, rawurl string, body io.Reader) (*http.Response, er
 	case "":
 		fallthrough
 	case "https":
-		fmt.Println("####### SendHttpRequest 1: ")
 		pool := x509.NewCertPool()
 		crt, err := ioutil.ReadFile(setting.HttpsCertFile)
 		if err != nil {
-			fmt.Println("####### SendHttpRequest 2: ", err.Error())
 			return &http.Response{}, err
 		}
 		pool.AppendCertsFromPEM(crt)
@@ -71,18 +68,15 @@ func SendHttpRequest(methord, rawurl string, body io.Reader) (*http.Response, er
 			DisableCompression: true,
 		}
 		client = &http.Client{Transport: tr}
-		fmt.Println("####### SendHttpRequest 3: ")
 	case "http":
 		//tr := http.DefaultTransport.(*http.Transport)
 		client = &http.Client{}
-		fmt.Println("####### SendHttpRequest 4: ")
 	default:
 		return &http.Response{}, fmt.Errorf("wrong url schema: %v", url.Scheme)
 	}
 
 	req, err := http.NewRequest(methord, url.String(), body)
 	if err != nil {
-		fmt.Println("####### SendHttpRequest 2: ", err.Error())
 		return &http.Response{}, err
 	}
 	req.URL.RawQuery = req.URL.Query().Encode()
@@ -90,7 +84,6 @@ func SendHttpRequest(methord, rawurl string, body io.Reader) (*http.Response, er
 
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("####### SendHttpRequest 3: ", err.Error())
 		return &http.Response{}, err
 	}
 	//defer resp.Body.Close()
