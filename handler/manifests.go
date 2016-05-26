@@ -118,6 +118,15 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		}
 	}
 
+	//TODO:
+	//synchronize to DR center
+	auth := ctx.Req.Header.Get("Authorization")
+	if err := module.TrigSynch(namespace, repository, tag, auth, setting.DRList); err != nil {
+		log.Error("\nFail to synchronize %s/%s:%s to DR %s", namespace, repository, tag, setting.DRList)
+	} else {
+		log.Trace("\nSuccess to synchronize %s/%s:%s to DR %s", namespace, repository, tag, setting.DRList)
+	}
+
 	var status = []int{http.StatusBadRequest, http.StatusAccepted, http.StatusCreated}
 	return status[schema], []byte("")
 }

@@ -272,7 +272,7 @@ func TrigSynch(namespace, repository, tag, auth, dest string) error {
 		return err
 	} else {
 		//TODO: must announce success to user
-		Log.Trace("\nSynchronize %s/%s:%s to %s successfully", namespace, repository, tag, dest)
+		Log.Trace("\nSuccess synchronize %s/%s:%s to %s", namespace, repository, tag, dest)
 	}
 
 	return nil

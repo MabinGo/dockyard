@@ -558,6 +558,7 @@ var (
 	SynUser     string
 	SynPasswd   string
 	SynInterval int64
+	DRList      string
 )
 
 func setSynchronConfig(conf config.Configer) error {
@@ -588,6 +589,8 @@ func setSynchronConfig(conf config.Configer) error {
 
 func setDRConfig(conf config.Configer) error {
 	var err error = nil
+
+	DRList = conf.String("dockyard::drlist")
 
 	return err
 }
