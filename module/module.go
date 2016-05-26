@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"os"
 
+	"github.com/astaxie/beego/logs"
+
 	"github.com/containerops/dockyard/models"
 	"github.com/containerops/dockyard/utils"
 	"github.com/containerops/dockyard/utils/setting"
@@ -20,6 +22,14 @@ import (
 var RTName string = "RegionTable"
 
 var Apis = []string{"images", "tarsum", "acis"}
+
+var Log *logs.BeeLogger
+
+func init() {
+	Log = logs.NewLogger(4096)
+	Log.SetLogger("console", "")
+	//Log.SetLogger("file", fmt.Sprintf("{\"filename\":\"%s\"}", setting.LogPath))
+}
 
 func CleanCache(imageId string, apiversion int64) {
 	imagepath := GetImagePath(imageId, apiversion)
@@ -254,9 +264,15 @@ func TrigSynch(namespace, repository, tag, auth, dest string) error {
 	}
 	rawurl := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
 	if resp, err := SendHttpRequest("PUT", rawurl, bytes.NewReader(body), auth); err != nil {
+		Log.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
 		return err
 	} else if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("response code %v", resp.StatusCode)
+		err := fmt.Errorf("response code %v", resp.StatusCode)
+		Log.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
+		return err
+	} else {
+		//TODO: must announce success to user
+		Log.Trace("\nSynchronize %s/%s:%s to %s successfully", namespace, repository, tag, dest)
 	}
 
 	return nil

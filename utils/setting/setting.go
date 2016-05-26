@@ -189,6 +189,7 @@ func setRuntimeConfig(conf config.Configer) error {
 	err = setAuthServerConfig(conf)
 	err = setAuthConfig(conf)
 	err = setSynchronConfig(conf)
+	err = setDRConfig(conf)
 
 	return err
 }
@@ -581,6 +582,12 @@ func setSynchronConfig(conf config.Configer) error {
 	default:
 		err = fmt.Errorf("Not support synch mode %v", SynMode)
 	}
+
+	return err
+}
+
+func setDRConfig(conf config.Configer) error {
+	var err error = nil
 
 	return err
 }
