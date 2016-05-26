@@ -369,6 +369,51 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 	return nil
 }
 
+func SaveDRCContent(reqbody []byte) error {
+	eplistIn := new(models.Endpointlist)
+	if err := json.Unmarshal(reqbody, eplistIn); err != nil {
+		return err
+	}
+
+	rt := new(models.RegionTable)
+	if exists, err := rt.Get(RTName); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("region table not found")
+	}
+
+	eplistOri := new(models.Endpointlist)
+	if rt.DRClist != "" {
+		if err := json.Unmarshal([]byte(rt.DRClist), eplistOri); err != nil {
+			return err
+		}
+
+		for _, epin := range eplistIn.Endpoints {
+			exists := false
+			for k, v := range eplistOri.Endpoints {
+				if epin.URL == v.URL {
+					exists = true
+					eplistOri.Endpoints[k] = epin
+					eplistOri.Endpoints[k].Active = true
+					break
+				}
+			}
+
+			if !exists {
+				epin.Active = true
+				eplistOri.Endpoints = append(eplistOri.Endpoints, epin)
+			}
+		}
+	} else {
+		eplistOri = eplistIn
+	}
+
+	result, _ := json.Marshal(eplistOri)
+	rt.DRClist = string(result)
+
+	return nil
+}
+
 func TrigSynEndpoint(region *models.Region, auth string) error {
 	eplist := new(models.Endpointlist)
 	if err := json.Unmarshal([]byte(region.Endpointlist), eplist); err != nil {

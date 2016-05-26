@@ -131,15 +131,14 @@ func SetRouters(m *macaron.Macaron) {
 		})
 	})
 
-	//TODO
-	//images distributed
+	//images synchron distributed
 	m.Group("/syn", func() {
+		m.Post("/adddrc", handler.PostSynDRCHandler) //TODO: need authorization
 		m.Post("/:namespace/:repository/:tag/region", handler.PostSynRegionHandler)
 		m.Post("/:namespace/:repository/:tag/trigger", handler.PostSynTrigHandler)
 		m.Put("/:namespace/:repository/:tag/content", handler.PutSynContentHandler)
 		//m.Delete("/:namespace/:repository/:tag/region", handler.PostDelRegionHandler)
 
-		//Query API
-		//...
+		//TODO: Query API
 	})
 }

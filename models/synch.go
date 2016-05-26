@@ -17,6 +17,7 @@ type RegionTable struct {
 	Id         int64  `json:"id" orm:"auto"`
 	Name       string `json:"name" orm:"null;varchar(255)"`
 	Regionlist string `json:"regionlist" orm:"null;type(text)"`
+	DRClist    string `json:"drclist" orm:"null;type(text)"`
 }
 
 type Endpoint struct {

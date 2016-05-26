@@ -189,7 +189,6 @@ func setRuntimeConfig(conf config.Configer) error {
 	err = setAuthServerConfig(conf)
 	err = setAuthConfig(conf)
 	err = setSynchronConfig(conf)
-	err = setDRConfig(conf)
 
 	return err
 }
@@ -558,7 +557,6 @@ var (
 	SynUser     string
 	SynPasswd   string
 	SynInterval int64
-	DRList      string
 )
 
 func setSynchronConfig(conf config.Configer) error {
@@ -583,14 +581,6 @@ func setSynchronConfig(conf config.Configer) error {
 	default:
 		err = fmt.Errorf("Not support synch mode %v", SynMode)
 	}
-
-	return err
-}
-
-func setDRConfig(conf config.Configer) error {
-	var err error = nil
-
-	DRList = conf.String("dockyard::drlist")
 
 	return err
 }
