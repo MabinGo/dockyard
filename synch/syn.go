@@ -16,6 +16,104 @@ import (
 
 var RTName string = "RegionTable"
 
+func TrigSynDRC(namespace, repository, tag, auth string) error {
+	rt := new(RegionTable)
+	if exists, err := rt.Get(RTName); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("region table not found")
+	}
+
+	if rt.DRClist != "" {
+		eplist := new(Endpointlist)
+		if err := json.Unmarshal([]byte(rt.DRClist), eplist); err != nil {
+			return err
+		}
+
+		for _, v := range eplist.Endpoints {
+			if v.Active == false {
+				continue
+			}
+
+			if err := trig(namespace, repository, tag, auth, v.URL); err != nil {
+				synlog.Error("\nFailed to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
+			} else {
+				synlog.Trace("\nSuccessed to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
+			}
+		}
+	}
+
+	return nil
+}
+
+func TrigSynEndpoint(region *Region, auth string) error {
+	eplist := new(Endpointlist)
+	if err := json.Unmarshal([]byte(region.Endpointlist), eplist); err != nil {
+		return err
+	}
+
+	activecnt := 0
+	errs := []string{}
+	for k, _ := range eplist.Endpoints {
+		if eplist.Endpoints[k].Active == false {
+			activecnt++
+			continue
+		}
+		//TODO: opt to use goroutine
+		if err := trig(region.Namespace, region.Repository, region.Tag, auth, eplist.Endpoints[k].URL); err != nil {
+			synlog.Error("\nFailed to synchronize %s/%s:%s to %s",
+				region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL)
+			errs = append(errs, fmt.Sprintf("\nsynchronize to %s error: %s", eplist.Endpoints[k].URL, err.Error()))
+			continue
+		} else {
+			synlog.Trace("\nSuccessed to synchronize %s/%s:%s to %s",
+				region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL)
+		}
+	}
+
+	if activecnt == len(eplist.Endpoints) {
+		synlog.Trace("\nno active region")
+	}
+	/*
+		if len(eplist.Endpoints) == len(errs) {
+			return fmt.Errorf("%v", errs)
+		}
+	*/
+	if len(errs) > 0 {
+		return fmt.Errorf("%v", errs)
+	}
+
+	return nil
+}
+
+func trig(namespace, repository, tag, auth, dest string) error {
+	sc := new(Syncont)
+	sc.Layers = make(map[string][]byte)
+	if err := FillSynContent(namespace, repository, tag, sc); err != nil {
+		return err
+	}
+
+	//trigger synchronous distribution immediately
+	body, err := json.Marshal(sc)
+	if err != nil {
+		return err
+	}
+	rawurl := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
+	if resp, err := module.SendHttpRequest("PUT", rawurl, bytes.NewReader(body), auth); err != nil {
+		//synlog.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
+		return err
+	} else if resp.StatusCode != http.StatusOK {
+		err := fmt.Errorf("response code %v", resp.StatusCode)
+		//synlog.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
+		return err
+	} else {
+		//TODO: must announce success to user
+		//synlog.Trace("\nSuccess synchronize %s/%s:%s to %s", namespace, repository, tag, dest)
+	}
+
+	return nil
+}
+
 //TODO: must consider parallel, push/pull during synchron
 func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
 	sc := new(Syncont)
@@ -166,52 +264,25 @@ func FillSynContent(namespace, repository, tag string, sc *Syncont) error {
 	return nil
 }
 
-func trig(namespace, repository, tag, auth, dest string) error {
-	sc := new(Syncont)
-	sc.Layers = make(map[string][]byte)
-	if err := FillSynContent(namespace, repository, tag, sc); err != nil {
-		return err
-	}
-
-	//trigger synchronous distribution immediately
-	body, err := json.Marshal(sc)
-	if err != nil {
-		return err
-	}
-	rawurl := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
-	if resp, err := module.SendHttpRequest("PUT", rawurl, bytes.NewReader(body), auth); err != nil {
-		//Log.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
-		return err
-	} else if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("response code %v", resp.StatusCode)
-		//Log.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
-		return err
-	} else {
-		//TODO: must announce success to user
-		//Log.Trace("\nSuccess synchronize %s/%s:%s to %s", namespace, repository, tag, dest)
-	}
-
-	return nil
-}
-
 func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error {
 	eplist := new(Endpointlist)
 	if err := json.Unmarshal(reqbody, eplist); err != nil {
 		return err
 	}
 
-	re := new(Region)
-	if existed, err := re.Get(namespace, repository, tag); err != nil {
+	regionIn := new(Region)
+	if existed, err := regionIn.Get(namespace, repository, tag); err != nil {
 		return err
 	} else if !existed {
 		//for k, _ := range eplist.Endpoints {
 		//	eplist.Endpoints[k].Active = true
 		//}
 		result, _ := json.Marshal(eplist)
-		re.Namespace, re.Repository, re.Tag, re.Endpointlist = namespace, repository, tag, string(result)
+		regionIn.Namespace, regionIn.Repository, regionIn.Tag, regionIn.Endpointlist =
+			namespace, repository, tag, string(result)
 	} else {
 		eporig := new(Endpointlist)
-		if err := json.Unmarshal([]byte(re.Endpointlist), eporig); err != nil {
+		if err := json.Unmarshal([]byte(regionIn.Endpointlist), eporig); err != nil {
 			return err
 		}
 
@@ -233,54 +304,19 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 		}
 
 		result, _ := json.Marshal(eporig)
-		re.Endpointlist = string(result)
+		regionIn.Endpointlist = string(result)
 	}
 
-	if err := re.Save(namespace, repository, tag); err != nil {
+	if err := regionIn.Save(namespace, repository, tag); err != nil {
 		return err
 	}
 
 	//TODO: mutex
-	//if setting.SynMode != "" {
-	rt := new(RegionTable)
-	if exists, err := rt.Get(RTName); err != nil {
-		return err
-	} else if !exists {
-		return fmt.Errorf("region table invalid")
-	}
-
-	rl := new(Regionlist)
-	if rt.Regionlist != "" {
-		if err := json.Unmarshal([]byte(rt.Regionlist), rl); err != nil {
+	if setting.SynMode != "" {
+		if err := UpdateRegionTable(regionIn); err != nil {
 			return err
 		}
-
-		exists := false
-		index := 0
-		for k, v := range rl.Regions {
-			if v.Id == re.Id {
-				exists = true
-				index = k
-				break
-			}
-		}
-
-		if !exists {
-			rl.Regions = append(rl.Regions, *re)
-		} else {
-			rl.Regions[index] = *re
-		}
-	} else {
-		//rl := new(Regionlist)
-		rl.Regions = append(rl.Regions, *re)
 	}
-	result, _ := json.Marshal(rl)
-	rt.Regionlist = string(result)
-
-	if err := rt.Save(RTName); err != nil {
-		return err
-	}
-	//}
 
 	return nil
 }
@@ -336,54 +372,16 @@ func SaveDRCContent(reqbody []byte) error {
 	return nil
 }
 
-func TrigSynEndpoint(region *Region, auth string) error {
-	eplist := new(Endpointlist)
-	if err := json.Unmarshal([]byte(region.Endpointlist), eplist); err != nil {
+func UpdateRegionTable(regionIn *Region) error {
+	rt := new(RegionTable)
+	if exists, err := rt.Get(RTName); err != nil {
 		return err
+	} else if !exists {
+		return fmt.Errorf("region table invalid")
 	}
 
-	activecnt := 0
-	errs := []string{}
-	for k, _ := range eplist.Endpoints {
-		if eplist.Endpoints[k].Active == false {
-			activecnt++
-			continue
-		}
-		//TODO: opt to use goroutine
-		if err := trig(region.Namespace, region.Repository, region.Tag, auth, eplist.Endpoints[k].URL); err != nil {
-			Log.Error("\nFailed to synchronize %s/%s:%s to %s", region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL)
-			errs = append(errs, fmt.Sprintf("\nsynchronize to %s error: %s", eplist.Endpoints[k].URL, err.Error()))
-			continue
-		} else {
-			//eplist.Endpoints[k].Active = false
-			//fmt.Printf("\nsynchronize to %s successfully\n", eplist.Endpoints[k].URL)
-			Log.Trace("\nSuccessed to synchronize %s/%s:%s to %s", region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL)
-		}
-	}
-	/*
-		if activecnt == len(eplist.Endpoints) {
-			fmt.Printf("no active region")
-		}
-	*/
-	if len(eplist.Endpoints) == len(errs) {
-		return fmt.Errorf("%v", errs)
-	}
-
-	result, _ := json.Marshal(eplist)
-	region.Endpointlist = string(result)
-	if err := region.Save(region.Namespace, region.Repository, region.Tag); err != nil {
-		return err
-	}
-
-	if setting.SynMode != "" {
-		rt := new(RegionTable)
-		if exists, err := rt.Get(RTName); err != nil {
-			return err
-		} else if !exists {
-			return fmt.Errorf("region table invalid")
-		}
-
-		rl := new(Regionlist)
+	rl := new(Regionlist)
+	if rt.Regionlist != "" {
 		if err := json.Unmarshal([]byte(rt.Regionlist), rl); err != nil {
 			return err
 		}
@@ -391,7 +389,7 @@ func TrigSynEndpoint(region *Region, auth string) error {
 		exists := false
 		index := 0
 		for k, v := range rl.Regions {
-			if v.Id == region.Id {
+			if v.Id == regionIn.Id {
 				exists = true
 				index = k
 				break
@@ -399,50 +397,18 @@ func TrigSynEndpoint(region *Region, auth string) error {
 		}
 
 		if !exists {
-			return fmt.Errorf("region table invalid")
+			rl.Regions = append(rl.Regions, *regionIn)
 		} else {
-			rl.Regions[index] = *region
+			rl.Regions[index] = *regionIn
 		}
-
-		result, _ := json.Marshal(rl)
-		rt.Regionlist = string(result)
-		if err := rt.Save(RTName); err != nil {
-			return err
-		}
+	} else {
+		rl.Regions = append(rl.Regions, *regionIn)
 	}
+	result, _ := json.Marshal(rl)
+	rt.Regionlist = string(result)
 
-	if len(errs) > 0 {
-		return fmt.Errorf("%v", errs)
-	}
-
-	return nil
-}
-
-func TrigSynDRC(namespace, repository, tag, auth string) error {
-	rt := new(RegionTable)
-	if exists, err := rt.Get(RTName); err != nil {
+	if err := rt.Save(RTName); err != nil {
 		return err
-	} else if !exists {
-		return fmt.Errorf("region table not found")
-	}
-
-	if rt.DRClist != "" {
-		eplist := new(Endpointlist)
-		if err := json.Unmarshal([]byte(rt.DRClist), eplist); err != nil {
-			return err
-		}
-
-		for _, v := range eplist.Endpoints {
-			if v.Active == false {
-				continue
-			}
-
-			if err := trig(namespace, repository, tag, auth, v.URL); err != nil {
-				Log.Error("\nFailed to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
-			} else {
-				Log.Trace("\nSuccessed to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
-			}
-		}
 	}
 
 	return nil

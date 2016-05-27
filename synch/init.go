@@ -11,7 +11,7 @@ import (
 	"github.com/containerops/dockyard/utils/setting"
 )
 
-var Log *logs.BeeLogger
+var synlog *logs.BeeLogger
 
 func InitSynchron() error {
 	rt := new(RegionTable)
@@ -23,9 +23,9 @@ func InitSynchron() error {
 		}
 	}
 
-	Log = logs.NewLogger(4096)
-	Log.SetLogger("console", "")
-	Log.SetLogger("file", fmt.Sprintf("{\"filename\":\"%s\"}", setting.LogPath))
+	synlog = logs.NewLogger(4096)
+	synlog.SetLogger("console", "")
+	synlog.SetLogger("file", fmt.Sprintf("{\"filename\":\"%s\"}", setting.LogPath))
 
 	if setting.SynMode != "" {
 		authorization := "Basic " + utils.EncodeBasicAuth(setting.SynUser, setting.SynPasswd)
@@ -36,7 +36,7 @@ func InitSynchron() error {
 				case <-timer.C:
 					rt := new(RegionTable)
 					if exists, err := rt.Get(RTName); err != nil {
-						fmt.Printf("\nDB invalid: %s\n", err.Error())
+						synlog.Error("\nDB invalid: %s\n", err.Error())
 						continue
 					} else if exists {
 						if rt.Regionlist == "" {
@@ -45,18 +45,14 @@ func InitSynchron() error {
 
 						rlist := new(Regionlist)
 						if err := json.Unmarshal([]byte(rt.Regionlist), rlist); err != nil {
-							fmt.Printf("\nRegion list invalid: %s\n", err.Error())
+							synlog.Error("\nRegion list invalid: %s\n", err.Error())
 							continue
 						}
 
 						//create goroutine to distributed images at set intervals
 						for _, r := range rlist.Regions {
-							if err := TrigSynEndpoint(&r, authorization); err != nil {
-								fmt.Printf("\nSynchronize %s/%s/%s error: %s", r.Namespace, r.Repository, r.Tag, err.Error())
-							}
-							//else {
-							//	fmt.Printf("\nSynchronize %s/%s/%s successfully", r.Namespace, r.Repository, r.Tag)
-							//}
+							//TODO: repeat while timeout
+							TrigSynEndpoint(&r, authorization)
 						}
 					} else {
 

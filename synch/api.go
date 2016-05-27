@@ -5,18 +5,17 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/astaxie/beego/logs"
 	"gopkg.in/macaron.v1"
 
 	"github.com/containerops/dockyard/models"
 )
 
-func PostSynDRCHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
+func PostSynDRCHandler(ctx *macaron.Context) (int, []byte) {
 	var result []byte
 
 	body, _ := ctx.Req.Body().Bytes()
 	if err := SaveDRCContent(body); err != nil {
-		log.Error("[REGISTRY API] Failed to get DRC content: %s", err.Error())
+		synlog.Error("[REGISTRY API] Failed to get DRC content: %s", err.Error())
 
 		result, _ = json.Marshal(map[string]string{"message": "Failed to save DRC content"})
 		return http.StatusInternalServerError, result
@@ -26,7 +25,7 @@ func PostSynDRCHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 	return http.StatusOK, result
 }
 
-func PostSynRegionHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
+func PostSynRegionHandler(ctx *macaron.Context) (int, []byte) {
 	var result []byte
 
 	namespace := ctx.Params(":namespace")
@@ -36,12 +35,12 @@ func PostSynRegionHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 	//search repository whether existed
 	t := new(models.Tag)
 	if existed, err := t.Get(namespace, repository, tag); err != nil {
-		log.Error("[REGISTRY API V2] Failed to get tag: %s", err.Error())
+		synlog.Error("[REGISTRY API V2] Failed to get tag: %s", err.Error())
 
 		result, _ = json.Marshal(map[string]string{"message": "Failed to get tag"})
 		return http.StatusBadRequest, result
 	} else if !existed {
-		log.Error("[REGISTRY API V2] Not found tag: %s/%s:%s", namespace, repository, tag)
+		synlog.Error("[REGISTRY API V2] Not found tag: %s/%s:%s", namespace, repository, tag)
 
 		result, _ = json.Marshal(map[string]string{"message": "Not found tag"})
 		return http.StatusNotFound, result
@@ -50,7 +49,7 @@ func PostSynRegionHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 	//get region content
 	body, _ := ctx.Req.Body().Bytes()
 	if err := SaveRegionContent(namespace, repository, tag, body); err != nil {
-		log.Error("[REGISTRY API] Failed to get region content: %s", err.Error())
+		synlog.Error("[REGISTRY API] Failed to get region content: %s", err.Error())
 
 		result, _ = json.Marshal(map[string]string{"message": "Failed to save region content"})
 		return http.StatusInternalServerError, result
@@ -60,7 +59,7 @@ func PostSynRegionHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 	return http.StatusOK, result
 }
 
-func PostSynTrigHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
+func PostSynTrigHandler(ctx *macaron.Context) (int, []byte) {
 	var result []byte
 
 	namespace := ctx.Params(":namespace")
@@ -70,19 +69,19 @@ func PostSynTrigHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 
 	region := new(Region)
 	if existed, err := region.Get(namespace, repository, tag); err != nil {
-		log.Error("[REGISTRY API] Failed to get region: %s", err.Error())
+		synlog.Error("[REGISTRY API] Failed to get region: %s", err.Error())
 
 		result, _ = json.Marshal(map[string]string{"message": "Failed to get region info"})
 		return http.StatusInternalServerError, result
 	} else if !existed {
-		log.Error("[REGISTRY API] Not found region")
+		synlog.Error("[REGISTRY API] Not found region")
 
 		result, _ = json.Marshal(map[string]string{"message": "Not found region"})
 		return http.StatusNotFound, result
 	}
 
 	if err := TrigSynEndpoint(region, auth); err != nil {
-		log.Error("[REGISTRY API] Failed to synchron: %s", err.Error())
+		synlog.Error("[REGISTRY API] Failed to synchron: %s", err.Error())
 
 		result, _ = json.Marshal(map[string]string{"message": "Failed to synchron"})
 		return http.StatusInternalServerError, result
@@ -92,7 +91,7 @@ func PostSynTrigHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 	return http.StatusOK, result
 }
 
-func PutSynContentHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
+func PutSynContentHandler(ctx *macaron.Context) (int, []byte) {
 	var result []byte
 
 	namespace := ctx.Params(":namespace")
@@ -101,7 +100,7 @@ func PutSynContentHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 
 	body, _ := ctx.Req.Body().Bytes()
 	if err := SaveSynContent(namespace, repository, tag, body); err != nil {
-		log.Error("[REGISTRY API] Failed to save syn content: %s", err.Error())
+		synlog.Error("[REGISTRY API] Failed to save syn content: %s", err.Error())
 
 		result, _ = json.Marshal(map[string]string{"message": "Failed to synchron"})
 		return http.StatusInternalServerError, result

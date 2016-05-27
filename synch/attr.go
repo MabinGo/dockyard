@@ -6,6 +6,13 @@ import (
 )
 
 //distribution region
+type RegionTable struct {
+	Id         int64  `json:"id" orm:"auto"`
+	Name       string `json:"name" orm:"null;varchar(255)"`
+	Regionlist string `json:"regionlist" orm:"null;type(text)"`
+	DRClist    string `json:"drclist" orm:"null;type(text)"`
+}
+
 type Region struct {
 	Id           int64  `json:"id,omitempty" orm:"auto"`
 	Namespace    string `json:"namespace,omitempty" orm:"null;varchar(255)"`
@@ -14,18 +21,8 @@ type Region struct {
 	Endpointlist string `json:"endpointlist" orm:"null;type(text)"` //orm fk is invalid
 }
 
-type RegionTable struct {
-	Id         int64  `json:"id" orm:"auto"`
-	Name       string `json:"name" orm:"null;varchar(255)"`
-	Regionlist string `json:"regionlist" orm:"null;type(text)"`
-	DRClist    string `json:"drclist" orm:"null;type(text)"`
-}
-
-type Endpoint struct {
-	Area   string `json:"area"`
-	Name   string `json:"name"`
-	URL    string `json:"url"`
-	Active bool   `json:"active"`
+type Regionlist struct {
+	Regions []Region `json:"region"`
 }
 
 //format of register region
@@ -33,8 +30,11 @@ type Endpointlist struct {
 	Endpoints []Endpoint `json:"endpoints"`
 }
 
-type Regionlist struct {
-	Regions []Region `json:"region"`
+type Endpoint struct {
+	Area   string `json:"area"`
+	Name   string `json:"name"`
+	URL    string `json:"url"`
+	Active bool   `json:"active"`
 }
 
 type Syncont struct {
