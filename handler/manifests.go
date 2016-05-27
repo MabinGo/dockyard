@@ -11,6 +11,7 @@ import (
 
 	"github.com/containerops/dockyard/models"
 	"github.com/containerops/dockyard/module"
+	"github.com/containerops/dockyard/synch"
 	"github.com/containerops/dockyard/utils/setting"
 	"github.com/containerops/dockyard/utils/signature"
 )
@@ -121,29 +122,7 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 	//TODO:
 	//synchronize to DR center
 	auth := ctx.Req.Header.Get("Authorization")
-	rt := new(models.RegionTable)
-	if exists, err := rt.Get(module.RTName); err != nil {
-		return 500, []byte(err.Error())
-	} else if !exists {
-		return 500, []byte(fmt.Errorf("region table not found").Error())
-	}
-
-	if rt.DRClist != "" {
-		eplist := new(models.Endpointlist)
-		if err := json.Unmarshal([]byte(rt.DRClist), eplist); err != nil {
-			return 500, []byte(err.Error())
-		}
-
-		for _, v := range eplist.Endpoints {
-			if err := module.TrigSynch(namespace, repository, tag, auth, "192.168.19.111"); err != nil {
-				log.Error("\nFail to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
-			} else {
-				log.Trace("\nSuccess to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
-			}
-		}
-	} else {
-		log.Error("#################################")
-	}
+	synch.TrigSynDRC(namespace, repository, tag, auth)
 
 	var status = []int{http.StatusBadRequest, http.StatusAccepted, http.StatusCreated}
 	return status[schema], []byte("")

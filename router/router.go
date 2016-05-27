@@ -7,6 +7,7 @@ import (
 	"github.com/containerops/dockyard/handler"
 	"github.com/containerops/dockyard/oss"
 	"github.com/containerops/dockyard/oss/apiserver"
+	"github.com/containerops/dockyard/synch"
 )
 
 func SetRouters(m *macaron.Macaron) {
@@ -133,11 +134,11 @@ func SetRouters(m *macaron.Macaron) {
 
 	//images synchron distributed
 	m.Group("/syn", func() {
-		m.Post("/adddrc", handler.PostSynDRCHandler) //TODO: need authorization
-		m.Post("/:namespace/:repository/:tag/region", handler.PostSynRegionHandler)
-		m.Post("/:namespace/:repository/:tag/trigger", handler.PostSynTrigHandler)
-		m.Put("/:namespace/:repository/:tag/content", handler.PutSynContentHandler)
-		//m.Delete("/:namespace/:repository/:tag/region", handler.PostDelRegionHandler)
+		m.Post("/adddrc", synch.PostSynDRCHandler) //TODO: need authorization
+		m.Post("/:namespace/:repository/:tag/region", synch.PostSynRegionHandler)
+		m.Post("/:namespace/:repository/:tag/trigger", synch.PostSynTrigHandler)
+		m.Put("/:namespace/:repository/:tag/content", synch.PutSynContentHandler)
+		//m.Delete("/:namespace/:repository/:tag/region", synch.PostDelRegionHandler)
 
 		//TODO: Query API
 	})

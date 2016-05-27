@@ -102,6 +102,11 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 		return true, nil
 	}
 
+	//TODO: filter disaster recovery verification temporarily
+	if strings.Compare(ctx.Req.RequestURI, "/syn/adddrc") == 0 {
+		return false, nil
+	}
+
 	if partslen != 2 || sign != "basic" {
 		return false, fmt.Errorf("invalid user name or password")
 	}

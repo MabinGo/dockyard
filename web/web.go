@@ -26,7 +26,7 @@ func SetDockyardMacaron(m *macaron.Macaron) {
 		db.Drv.RegisterModel(new(dao.Organization), new(dao.User), new(dao.OrganizationUserMap),
 			new(dao.RepositoryEx), new(dao.Team), new(dao.TeamRepositoryMap), new(dao.TeamUserMap))
 
-		db.Drv.RegisterModel(new(models.Region), new(models.RegionTable))
+		db.Drv.RegisterModel(new(synch.Region), new(synch.RegionTable))
 
 		if err := db.Drv.InitDB(
 			setting.DBDriver,
@@ -66,9 +66,9 @@ func SetDockyardMacaron(m *macaron.Macaron) {
 	}
 
 	//TODO:
-	if setting.SynMode != "" {
-		if err := synch.InitSynchron(); err != nil {
-			fmt.Printf("Init synch error: %s\n", err.Error())
-		}
+	//if setting.SynMode != "" {
+	if err := synch.InitSynchron(); err != nil {
+		fmt.Printf("Init synch error: %s\n", err.Error())
 	}
+	//}
 }

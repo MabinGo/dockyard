@@ -1,0 +1,445 @@
+package synch
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"os"
+
+	"github.com/containerops/dockyard/models"
+	"github.com/containerops/dockyard/module"
+	"github.com/containerops/dockyard/utils"
+	"github.com/containerops/dockyard/utils/setting"
+)
+
+var RTName string = "RegionTable"
+
+//TODO: must consider parallel, push/pull during synchron
+func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
+	sc := new(Syncont)
+	sc.Layers = make(map[string][]byte)
+	if err := json.Unmarshal(reqbody, sc); err != nil {
+		return err
+	}
+
+	//cover repo
+	r := new(models.Repository)
+	existed, err := r.Get(namespace, repository)
+	if err != nil {
+		return err
+	}
+	//Id,Memo,Created,Updated
+	r.Namespace = sc.Repository.Namespace
+	r.Repository = sc.Repository.Repository
+	r.Agent = sc.Repository.Agent
+	r.Size = sc.Repository.Size
+	r.Version = sc.Repository.Version
+	r.JSON = sc.Repository.JSON
+	if !existed {
+		r.Tagslist = r.SaveTagslist([]string{tag})
+		r.Download = 0
+	} else {
+		//r.Tagslist = r.SaveTagslist([]string{tag})
+		exists := false
+		tagslist := r.GetTagslist()
+		for _, v := range tagslist {
+			if v == tag {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			tagslist = append(tagslist, tag)
+		}
+		r.Tagslist = r.SaveTagslist(tagslist)
+	}
+	if err := r.Save(r.Namespace, r.Repository); err != nil {
+		return err
+	}
+
+	//cover tag
+	t := new(models.Tag)
+	if _, err := t.Get(namespace, repository, tag); err != nil {
+		return err
+	}
+	//Id,Memo,Created,Updated
+	t.Namespace = sc.Tag.Namespace
+	t.Repository = sc.Tag.Repository
+	t.Tag = sc.Tag.Tag
+	t.ImageId = sc.Tag.ImageId
+	t.Manifest = sc.Tag.Manifest
+	t.Schema = sc.Tag.Schema
+	if err := t.Save(t.Namespace, t.Repository, t.Tag); err != nil {
+		return err
+	}
+
+	//cover image
+	var tarsumlist = []string{}
+	for _, synimg := range sc.Images {
+		i := new(models.Image)
+		existed, err := i.Get(synimg.ImageId)
+		if err != nil {
+			return err
+		}
+		//Id,Memo,Created,Updated,ManiPath,SignPath,AciPath
+		i.ImageId = synimg.ImageId
+		i.JSON = synimg.JSON
+		i.Ancestry = synimg.Ancestry
+		i.Checksum = synimg.Checksum
+		i.Payload = synimg.Payload
+		i.Checksumed = synimg.Checksumed
+		i.Uploaded = synimg.Uploaded
+		i.Path = module.GetLayerPath(synimg.ImageId, "layer", setting.APIVERSION_V2)
+		i.Size = synimg.Size
+		i.Version = synimg.Version
+		if !existed {
+			i.Count = 0
+		}
+
+		if err := i.Save(i.ImageId); err != nil {
+			return err
+		}
+
+		//TODO: consider to delete or cover the origin images
+		imgpath := module.GetImagePath(i.ImageId, setting.APIVERSION_V2)
+		if !utils.IsDirExist(imgpath) {
+			if err := os.MkdirAll(imgpath, os.ModePerm); err != nil {
+				return err
+			}
+		}
+		if err := ioutil.WriteFile(i.Path, sc.Layers[i.ImageId], 0777); err != nil {
+			return err
+		}
+		tarsumlist = append(tarsumlist, i.ImageId)
+	}
+
+	//upload to oss
+	if err := module.UploadLayer(tarsumlist); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func FillSynContent(namespace, repository, tag string, sc *Syncont) error {
+	r := new(models.Repository)
+	if existed, err := r.Get(namespace, repository); err != nil {
+		return err
+	} else if !existed {
+		return fmt.Errorf("not found repository %s/%s", namespace, repository)
+	}
+	sc.Repository = *r
+
+	t := new(models.Tag)
+	if existed, err := t.Get(namespace, repository, tag); err != nil {
+		return err
+	} else if !existed {
+		return fmt.Errorf("not found tag %s/%s:%s", namespace, repository, tag)
+	}
+	sc.Tag = *t
+
+	//analyze manifest and get image metadate
+	tarsumlist, err := module.GetTarsumlist([]byte(t.Manifest))
+	if err != nil {
+		return err
+	}
+	//get all images metadata
+	for _, imageId := range tarsumlist {
+		i := new(models.Image)
+		if exists, err := i.Get(imageId); err != nil {
+			return err
+		} else if !exists {
+			return fmt.Errorf("not found image %s", imageId)
+		}
+		sc.Images = append(sc.Images, *i)
+
+		//get layer from local or OSS
+		if data, err := module.DownloadLayer(i.Path); err != nil {
+			return err
+		} else {
+			sc.Layers[imageId] = data
+		}
+	}
+
+	return nil
+}
+
+func trig(namespace, repository, tag, auth, dest string) error {
+	sc := new(Syncont)
+	sc.Layers = make(map[string][]byte)
+	if err := FillSynContent(namespace, repository, tag, sc); err != nil {
+		return err
+	}
+
+	//trigger synchronous distribution immediately
+	body, err := json.Marshal(sc)
+	if err != nil {
+		return err
+	}
+	rawurl := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
+	if resp, err := module.SendHttpRequest("PUT", rawurl, bytes.NewReader(body), auth); err != nil {
+		//Log.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
+		return err
+	} else if resp.StatusCode != http.StatusOK {
+		err := fmt.Errorf("response code %v", resp.StatusCode)
+		//Log.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
+		return err
+	} else {
+		//TODO: must announce success to user
+		Log.Trace("\nSuccess synchronize %s/%s:%s to %s", namespace, repository, tag, dest)
+	}
+
+	return nil
+}
+
+func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error {
+	eplist := new(Endpointlist)
+	if err := json.Unmarshal(reqbody, eplist); err != nil {
+		return err
+	}
+
+	re := new(Region)
+	if existed, err := re.Get(namespace, repository, tag); err != nil {
+		return err
+	} else if !existed {
+		//for k, _ := range eplist.Endpoints {
+		//	eplist.Endpoints[k].Active = true
+		//}
+		result, _ := json.Marshal(eplist)
+		re.Namespace, re.Repository, re.Tag, re.Endpointlist = namespace, repository, tag, string(result)
+	} else {
+		eporig := new(Endpointlist)
+		if err := json.Unmarshal([]byte(re.Endpointlist), eporig); err != nil {
+			return err
+		}
+
+		for _, epin := range eplist.Endpoints {
+			exists := false
+			for k, v := range eporig.Endpoints {
+				if epin.URL == v.URL {
+					exists = true
+					eporig.Endpoints[k] = epin
+					//eporig.Endpoints[k].Active = true
+					break
+				}
+			}
+
+			if !exists {
+				//epin.Active = true
+				eporig.Endpoints = append(eporig.Endpoints, epin)
+			}
+		}
+
+		result, _ := json.Marshal(eporig)
+		re.Endpointlist = string(result)
+	}
+
+	if err := re.Save(namespace, repository, tag); err != nil {
+		return err
+	}
+
+	//TODO: mutex
+	//if setting.SynMode != "" {
+	rt := new(RegionTable)
+	if exists, err := rt.Get(RTName); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("region table invalid")
+	}
+
+	rl := new(Regionlist)
+	if rt.Regionlist != "" {
+		if err := json.Unmarshal([]byte(rt.Regionlist), rl); err != nil {
+			return err
+		}
+
+		exists := false
+		index := 0
+		for k, v := range rl.Regions {
+			if v.Id == re.Id {
+				exists = true
+				index = k
+				break
+			}
+		}
+
+		if !exists {
+			rl.Regions = append(rl.Regions, *re)
+		} else {
+			rl.Regions[index] = *re
+		}
+	} else {
+		//rl := new(Regionlist)
+		rl.Regions = append(rl.Regions, *re)
+	}
+	result, _ := json.Marshal(rl)
+	rt.Regionlist = string(result)
+
+	if err := rt.Save(RTName); err != nil {
+		return err
+	}
+	//}
+
+	return nil
+}
+
+func SaveDRCContent(reqbody []byte) error {
+	eplistIn := new(Endpointlist)
+	if err := json.Unmarshal(reqbody, eplistIn); err != nil {
+		return err
+	}
+
+	rt := new(RegionTable)
+	if exists, err := rt.Get(RTName); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("region table not found")
+	}
+
+	eplistOri := new(Endpointlist)
+	if rt.DRClist != "" {
+		if err := json.Unmarshal([]byte(rt.DRClist), eplistOri); err != nil {
+			return err
+		}
+
+		for _, epin := range eplistIn.Endpoints {
+			exists := false
+			for k, v := range eplistOri.Endpoints {
+				if epin.URL == v.URL {
+					exists = true
+					eplistOri.Endpoints[k] = epin
+					//eplistOri.Endpoints[k].Active = true
+					break
+				}
+			}
+
+			if !exists {
+				//epin.Active = true
+				eplistOri.Endpoints = append(eplistOri.Endpoints, epin)
+			}
+		}
+	} else {
+		eplistOri = eplistIn
+		//for k, _ := range eplistOri.Endpoints {
+		//	eplistOri.Endpoints[k].Active = true
+		//}
+	}
+
+	result, _ := json.Marshal(eplistOri)
+	rt.DRClist = string(result)
+	if err := rt.Save(RTName); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func TrigSynEndpoint(region *Region, auth string) error {
+	eplist := new(Endpointlist)
+	if err := json.Unmarshal([]byte(region.Endpointlist), eplist); err != nil {
+		return err
+	}
+
+	activecnt := 0
+	errs := []string{}
+	for k, _ := range eplist.Endpoints {
+		if eplist.Endpoints[k].Active == false {
+			activecnt++
+			continue
+		}
+		//TODO: opt to use goroutine
+		if err := trig(region.Namespace, region.Repository, region.Tag, auth, eplist.Endpoints[k].URL); err != nil {
+			Log.Error("\nFailed to synchronize %s/%s:%s to %s", region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL)
+			errs = append(errs, fmt.Sprintf("\nsynchronize to %s error: %s", eplist.Endpoints[k].URL, err.Error()))
+			continue
+		} else {
+			//eplist.Endpoints[k].Active = false
+			//fmt.Printf("\nsynchronize to %s successfully\n", eplist.Endpoints[k].URL)
+			Log.Trace("\nSuccessed to synchronize %s/%s:%s to %s", region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL)
+		}
+	}
+	/*
+		if activecnt == len(eplist.Endpoints) {
+			fmt.Printf("no active region")
+		}
+	*/
+	if len(eplist.Endpoints) == len(errs) {
+		return fmt.Errorf("%v", errs)
+	}
+
+	result, _ := json.Marshal(eplist)
+	region.Endpointlist = string(result)
+	if err := region.Save(region.Namespace, region.Repository, region.Tag); err != nil {
+		return err
+	}
+
+	if setting.SynMode != "" {
+		rt := new(RegionTable)
+		if exists, err := rt.Get(RTName); err != nil {
+			return err
+		} else if !exists {
+			return fmt.Errorf("region table invalid")
+		}
+
+		rl := new(Regionlist)
+		if err := json.Unmarshal([]byte(rt.Regionlist), rl); err != nil {
+			return err
+		}
+
+		exists := false
+		index := 0
+		for k, v := range rl.Regions {
+			if v.Id == region.Id {
+				exists = true
+				index = k
+				break
+			}
+		}
+
+		if !exists {
+			return fmt.Errorf("region table invalid")
+		} else {
+			rl.Regions[index] = *region
+		}
+
+		result, _ := json.Marshal(rl)
+		rt.Regionlist = string(result)
+		if err := rt.Save(RTName); err != nil {
+			return err
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("%v", errs)
+	}
+
+	return nil
+}
+
+func TrigSynDRC(namespace, repository, tag, auth string) error {
+	rt := new(RegionTable)
+	if exists, err := rt.Get(RTName); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("region table not found")
+	}
+
+	if rt.DRClist != "" {
+		eplist := new(Endpointlist)
+		if err := json.Unmarshal([]byte(rt.DRClist), eplist); err != nil {
+			return err
+		}
+
+		for _, v := range eplist.Endpoints {
+			if err := trig(namespace, repository, tag, auth, v.URL); err != nil {
+				Log.Error("\nFailed to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
+			} else {
+				Log.Trace("\nSuccessed to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
+			}
+		}
+	}
+
+	return nil
+}

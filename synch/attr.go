@@ -1,6 +1,7 @@
-package models
+package synch
 
 import (
+	"github.com/containerops/dockyard/models"
 	"github.com/containerops/dockyard/utils/db"
 )
 
@@ -24,7 +25,7 @@ type Endpoint struct {
 	Area   string `json:"area"`
 	Name   string `json:"name"`
 	URL    string `json:"url"`
-	Active bool   `json:"active,omitempty"`
+	Active bool   `json:"active"`
 }
 
 //format of register region
@@ -37,9 +38,9 @@ type Regionlist struct {
 }
 
 type Syncont struct {
-	Repository Repository        `json:"repository"`
-	Tag        Tag               `json:"tag"`
-	Images     []Image           `json:"images"`
+	Repository models.Repository `json:"repository"`
+	Tag        models.Tag        `json:"tag"`
+	Images     []models.Image    `json:"images"`
 	Layers     map[string][]byte `json:"layers"`
 }
 
