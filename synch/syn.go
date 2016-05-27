@@ -188,7 +188,7 @@ func trig(namespace, repository, tag, auth, dest string) error {
 		return err
 	} else {
 		//TODO: must announce success to user
-		Log.Trace("\nSuccess synchronize %s/%s:%s to %s", namespace, repository, tag, dest)
+		//Log.Trace("\nSuccess synchronize %s/%s:%s to %s", namespace, repository, tag, dest)
 	}
 
 	return nil
@@ -433,6 +433,10 @@ func TrigSynDRC(namespace, repository, tag, auth string) error {
 		}
 
 		for _, v := range eplist.Endpoints {
+			if v.Active == false {
+				continue
+			}
+
 			if err := trig(namespace, repository, tag, auth, v.URL); err != nil {
 				Log.Error("\nFailed to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
 			} else {
