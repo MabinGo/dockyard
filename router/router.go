@@ -138,8 +138,8 @@ func SetRouters(m *macaron.Macaron) {
 		m.Post("/:namespace/:repository/:tag/region", synch.PostSynRegionHandler)
 		m.Post("/:namespace/:repository/:tag/trigger", synch.PostSynTrigHandler)
 		m.Put("/:namespace/:repository/:tag/content", synch.PutSynContentHandler)
-		//m.Delete("/:namespace/:repository/:tag/region", synch.PostDelRegionHandler)
-
-		//TODO: Query API
+		//TODO:
+		//m.Delete("/:namespace/:repository/:tag/region", synch.DelSynRegionHandler)
+		//m.Get("/:namespace/:repository/:tag", synch.GetSynRegionHandler)
 	})
 }

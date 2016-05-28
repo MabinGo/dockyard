@@ -36,7 +36,7 @@ func TrigSynDRC(namespace, repository, tag, auth string) error {
 			}
 
 			if err := trig(namespace, repository, tag, auth, v.URL); err != nil {
-				synlog.Error("\nFailed to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
+				synlog.Error("\nFailed to synchronize %s/%s:%s to DR %s, error: %v", namespace, repository, tag, v.URL, err)
 			} else {
 				synlog.Trace("\nSuccessed to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
 			}
@@ -61,8 +61,8 @@ func TrigSynEndpoint(region *Region, auth string) error {
 		}
 		//TODO: opt to use goroutine
 		if err := trig(region.Namespace, region.Repository, region.Tag, auth, eplist.Endpoints[k].URL); err != nil {
-			synlog.Error("\nFailed to synchronize %s/%s:%s to %s",
-				region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL)
+			synlog.Error("\nFailed to synchronize %s/%s:%s to %s, error: %v",
+				region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL, err)
 			errs = append(errs, fmt.Sprintf("\nsynchronize to %s error: %s", eplist.Endpoints[k].URL, err.Error()))
 			continue
 		} else {
@@ -98,24 +98,33 @@ func trig(namespace, repository, tag, auth, dest string) error {
 	if err != nil {
 		return err
 	}
-	rawurl := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
-	if resp, err := module.SendHttpRequest("PUT", rawurl, bytes.NewReader(body), auth); err != nil {
-		//synlog.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
-		return err
-	} else if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("response code %v", resp.StatusCode)
-		//synlog.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
-		return err
-	} else {
-		//TODO: must announce success to user
-		//synlog.Trace("\nSuccess synchronize %s/%s:%s to %s", namespace, repository, tag, dest)
+	url := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
+
+	var times = 10
+	var ret error
+	for i := times; i > 0; i-- {
+		rawurl := fmt.Sprintf("%s?times=%v&count=%v", url, times, i)
+		if resp, err := module.SendHttpRequest("PUT", rawurl, bytes.NewReader(body), auth); err != nil {
+			//synlog.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
+			ret = err
+			break
+		} else if resp.StatusCode != http.StatusOK { //http.StatusInternalServerError
+			ret = fmt.Errorf("response code %v", resp.StatusCode)
+			//synlog.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
+			continue
+		} else {
+			//TODO: must announce success to user
+			//synlog.Trace("\nSuccess synchronize %s/%s:%s to %s", namespace, repository, tag, dest)
+			ret = nil
+			break
+		}
 	}
 
-	return nil
+	return ret
 }
 
 //TODO: must consider parallel, push/pull during synchron
-func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
+func SaveSynContent(namespace, repository, tag, count string, reqbody []byte) error {
 	sc := new(Syncont)
 	sc.Layers = make(map[string][]byte)
 	if err := json.Unmarshal(reqbody, sc); err != nil {
@@ -313,7 +322,7 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 
 	//TODO: mutex
 	if setting.SynMode != "" {
-		if err := UpdateRegionTable(regionIn); err != nil {
+		if err := UpdateRegionList(regionIn); err != nil {
 			return err
 		}
 	}
@@ -372,7 +381,7 @@ func SaveDRCContent(reqbody []byte) error {
 	return nil
 }
 
-func UpdateRegionTable(regionIn *Region) error {
+func UpdateRegionList(regionIn *Region) error {
 	rt := new(RegionTable)
 	if exists, err := rt.Get(RTName); err != nil {
 		return err

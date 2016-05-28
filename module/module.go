@@ -57,16 +57,18 @@ func SendHttpRequest(methord, rawurl string, body io.Reader, auth string) (*http
 			return &http.Response{}, err
 		}
 		pool.AppendCertsFromPEM(crt)
+
 		tr := &http.Transport{
-			TLSClientConfig:    &tls.Config{RootCAs: pool},
-			DisableCompression: true,
+			TLSClientConfig: &tls.Config{
+				RootCAs:            pool,
+				InsecureSkipVerify: true,
+			},
 		}
 		client = &http.Client{Transport: tr}
 	case "http":
-		//tr := http.DefaultTransport.(*http.Transport)
 		client = &http.Client{}
 	default:
-		return &http.Response{}, fmt.Errorf("wrong url schema: %v", url.Scheme)
+		return &http.Response{}, fmt.Errorf("bad url schema: %v", url.Scheme)
 	}
 
 	req, err := http.NewRequest(methord, url.String(), body)
@@ -80,6 +82,6 @@ func SendHttpRequest(methord, rawurl string, body io.Reader, auth string) (*http
 	if err != nil {
 		return &http.Response{}, err
 	}
-	//defer resp.Body.Close()
+
 	return resp, nil
 }

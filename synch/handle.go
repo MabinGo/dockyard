@@ -97,9 +97,11 @@ func PutSynContentHandler(ctx *macaron.Context) (int, []byte) {
 	namespace := ctx.Params(":namespace")
 	repository := ctx.Params(":repository")
 	tag := ctx.Params(":tag")
+	times := ctx.Query("times")
+	count := ctx.Query("count")
 
 	body, _ := ctx.Req.Body().Bytes()
-	if err := SaveSynContent(namespace, repository, tag, body); err != nil {
+	if err := SaveSynContent(namespace, repository, tag, count, body); err != nil {
 		synlog.Error("[REGISTRY API] Failed to save syn content: %s", err.Error())
 
 		result, _ = json.Marshal(map[string]string{"message": "Failed to synchron"})
