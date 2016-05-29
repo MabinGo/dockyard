@@ -422,3 +422,87 @@ func UpdateRegionList(regionIn *Region) error {
 
 	return nil
 }
+
+func GetSynDRCList() (string, error) {
+	rt := new(RegionTable)
+	if exists, err := rt.Get(RTName); err != nil {
+		return "", err
+	} else if !exists {
+		return "", fmt.Errorf("region table invalid")
+	}
+
+	return rt.DRClist, nil
+}
+
+func GetSynRegionEndpoint(namespace, repository, tag string) (string, error) {
+	r := new(Region)
+	if exists, err := r.Get(namespace, repository, tag); err != nil {
+		return "", err
+	} else if !exists {
+		return "", fmt.Errorf("not found")
+	}
+
+	return r.Endpointlist, nil
+}
+
+func DelSynRegion(namespace, repository, tag string, reqbody []byte) error {
+	eplistIn := new(Endpointlist)
+	if err := json.Unmarshal(reqbody, eplistIn); err != nil {
+		return err
+	}
+
+	r := new(Region)
+	if existed, err := r.Get(namespace, repository, tag); err != nil {
+		return err
+	} else if !existed {
+		return fmt.Errorf("not found region")
+	}
+
+	if len(r.Endpointlist) <= 0 {
+		return fmt.Errorf("endpoint list invalid")
+	}
+
+	eplist := new(Endpointlist)
+	if err := json.Unmarshal([]byte(r.Endpointlist), eplist); err != nil {
+		return err
+	}
+
+	eplistNew := new(Endpointlist)
+
+	for _, ep := range eplist.Endpoints {
+		//exists := false
+		for k, v := range eplistIn.Endpoints {
+			if ep.URL != v.URL {
+				exists = true
+				eplist.Endpoints[k] = epin
+				break
+			}
+
+			if epin.URL == v.URL {
+				exists = true
+				eplist.Endpoints[k] = epin
+				break
+			}
+		}
+
+		if !exists {
+			eplist.Endpoints = append(eplist.Endpoints, epin)
+		}
+	}
+
+	result, _ := json.Marshal(eplist)
+	r.Endpointlist = string(result)
+
+	if err := r.Save(namespace, repository, tag); err != nil {
+		return err
+	}
+
+	//TODO: mutex
+	if setting.SynMode != "" {
+		if err := UpdateRegionList(r); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}

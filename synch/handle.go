@@ -21,7 +21,7 @@ func PostSynDRCHandler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusInternalServerError, result
 	}
 
-	result = []byte(fmt.Sprintf("[REGISTRY API] Register DRC synchron info successfully\n"))
+	result = []byte(fmt.Sprintf("[REGISTRY API] Successed to register DRC synchron info\n"))
 	return http.StatusOK, result
 }
 
@@ -55,7 +55,8 @@ func PostSynRegionHandler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusInternalServerError, result
 	}
 
-	result = []byte(fmt.Sprintf("[REGISTRY API] Register %s/%s:%s synchron info successfully\n", namespace, repository, tag))
+	result = []byte(fmt.Sprintf("[REGISTRY API] Successed to register %s/%s:%s synchron info\n",
+		namespace, repository, tag))
 	return http.StatusOK, result
 }
 
@@ -87,7 +88,8 @@ func PostSynTrigHandler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusInternalServerError, result
 	}
 
-	result = []byte(fmt.Sprintf("[REGISTRY API] Trigger %s/%s:%s synchron successfully\n", namespace, repository, tag))
+	result = []byte(fmt.Sprintf("[REGISTRY API] Successed to trigger %s/%s:%s synchron\n",
+		namespace, repository, tag))
 	return http.StatusOK, result
 }
 
@@ -108,6 +110,57 @@ func PutSynContentHandler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusInternalServerError, result
 	}
 
-	result = []byte(fmt.Sprintf("[REGISTRY API] Synchronize %s/%s:%s successfully\n", namespace, repository, tag))
+	result = []byte(fmt.Sprintf("[REGISTRY API] Successed to synchronize %s/%s:%s\n",
+		namespace, repository, tag))
+	return http.StatusOK, result
+}
+
+func GetSynDRCHandler(ctx *macaron.Context) (int, []byte) {
+	var result []byte
+
+	if drclist, err := GetSynDRCList(); err != nil {
+		synlog.Error("[REGISTRY API] Failed to get DRC list: %s", err.Error())
+
+		result, _ = json.Marshal(map[string]string{"message": "Failed to get DRC list"})
+		return http.StatusInternalServerError, result
+	}
+
+	return http.StatusOK, []byte(drclist)
+}
+
+func GetSynRegionHandler(ctx *macaron.Context) (int, []byte) {
+	var result []byte
+
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+	tag := ctx.Params(":tag")
+
+	if eplist, err := GetSynRegionEndpoint(namespace, repository, tag); err != nil {
+		synlog.Error("[REGISTRY API] Failed to get region info: %s", err.Error())
+
+		result, _ = json.Marshal(map[string]string{"message": "Failed to get region info"})
+		return http.StatusInternalServerError, result
+	}
+
+	return http.StatusOK, []byte(eplist)
+}
+
+func DelSynRegionHandler(ctx *macaron.Context) (int, []byte) {
+	var result []byte
+
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+	tag := ctx.Params(":tag")
+
+	body, _ := ctx.Req.Body().Bytes()
+	if err := DelSynRegion(namespace, repository, tag, body); err != nil {
+		synlog.Error("[REGISTRY API] Failed to delete syn region: %s", err.Error())
+
+		result, _ = json.Marshal(map[string]string{"message": "Failed to delete syn region"})
+		return http.StatusInternalServerError, result
+	}
+
+	result = []byte(fmt.Sprintf("[REGISTRY API] Successed to delete %s/%s:%s endpoint\n",
+		namespace, repository, tag))
 	return http.StatusOK, result
 }
