@@ -162,6 +162,191 @@ func Test_NonExistedUserCreateOrganization(t *testing.T) {
 
 }
 
+// update
+func UpdateOrganizationTest(t *testing.T, org *dao.Organization, username, password string) (int, error) {
+	body, _ := json.Marshal(org)
+	req, err := http.NewRequest("PUT", setting.ListenMode+"://"+Domains+"/uam/organization/update", bytes.NewBuffer(body))
+	if err != nil {
+		return -1, err
+	}
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	req.SetBasicAuth(username, password)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return -1, err
+	}
+	return resp.StatusCode, nil
+}
+
+//orgAdmin (user1) update Organization
+func Test_orgAdminUpdateOrganization(t *testing.T) {
+
+	Org.MemberPrivilege = dao.READ
+	Org.Comment = "orgAdmin update"
+	Org.URL = "url test"
+	Org.Location = "land"
+	statusCode, err := UpdateOrganizationTest(t, Org, User1.Name, User1.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode != 200 {
+		t.Fatal("Update Organization Failed.")
+	}
+
+	// query organization
+	org1 := &dao.Organization{Name: Org.Name}
+	if exist, err := org1.Get(); err != nil {
+		t.Error(err)
+	} else if !exist {
+		t.Error("org is not exitst")
+	} else {
+		if org1.Name != Org.Name || org1.Email != Org.Email ||
+			org1.Comment != Org.Comment || org1.URL != Org.URL ||
+			org1.Location != Org.Location ||
+			org1.MemberPrivilege != Org.MemberPrivilege {
+			t.Error("Update Organization Failed")
+		}
+	}
+}
+
+//sysAdmin update Organization
+func Test_sysAdminUpdateOrganization(t *testing.T) {
+
+	sysAdmin := &dao.User{
+		Name:     "root",
+		Password: "root",
+	}
+
+	Org.MemberPrivilege = dao.WRITE
+	Org.Comment = "sysAdmin update"
+	Org.URL = "url update"
+	Org.Location = "land"
+	statusCode, err := UpdateOrganizationTest(t, Org, sysAdmin.Name, sysAdmin.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode != 200 {
+		t.Fatal("Update Organization Failed.")
+	}
+}
+
+//anyone (user2) update Organization
+func Test_anyoneUpdateOrganization(t *testing.T) {
+
+	Org.MemberPrivilege = dao.WRITE
+	Org.Comment = "update Comment"
+	Org.URL = "update url"
+	Org.Location = "land"
+	statusCode, err := UpdateOrganizationTest(t, Org, User2.Name, User2.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode == 200 {
+		t.Fatal("Update Organization Error.")
+	}
+}
+
+//Non-Existed user update Organization
+func Test_NonExistUserUpdateOrganization(t *testing.T) {
+
+	user3 := &dao.User{
+		Name:     "user3",
+		Email:    "user3@gmail.com",
+		Password: "user3",
+		RealName: "user3",
+		Comment:  "Comment",
+		Status:   0,
+		Role:     dao.SYSMEMBER,
+	}
+
+	Org.MemberPrivilege = dao.WRITE
+	Org.Comment = "update Comment"
+	Org.URL = "update url"
+	Org.Location = "land"
+	statusCode, err := UpdateOrganizationTest(t, Org, user3.Name, user3.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode == 200 {
+		t.Fatal("Update Organization Error.")
+	}
+}
+
+//orgAdmin (user1) update Non Exist Organization
+func Test_orgAdminUpdateNonExistOrganization(t *testing.T) {
+
+	org1 := &dao.Organization{
+		Name:            "NonExist",
+		Email:           "admin@gmail.com",
+		Comment:         "orgAdmin update",
+		URL:             "URL",
+		Location:        "Location",
+		MemberPrivilege: dao.WRITE,
+	}
+
+	statusCode, err := UpdateOrganizationTest(t, org1, User1.Name, User1.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode == 200 {
+		t.Fatal("Update Organization Error.")
+	}
+}
+
+//Organization's Email,Comment,URL or Location is empty update test
+func Test_UpdateWithEmptyFieldsOrganization(t *testing.T) {
+
+	org := &dao.Organization{
+		Name: "huawei",
+		//Email:           "admin@gmail.com",
+		//Comment:         "Comment orgjson,
+		//URL:             "URL",
+		//Location:        "Location",
+		MemberPrivilege: dao.WRITE,
+	}
+	//Email  empty
+	//Comment empty
+	org.URL = "url test"
+	org.Location = "land"
+	statusCode, err := UpdateOrganizationTest(t, org, User1.Name, User1.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode != 200 {
+		t.Fatal("Update Organization Error.")
+	}
+
+	//Email:  ""
+	org.Email = " "
+	org.Comment = "update org"
+	statusCode, err = UpdateOrganizationTest(t, org, User1.Name, User1.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode != 200 {
+		t.Fatal("Update Organization Error.")
+	}
+
+	org.Email = "admin@gmail.com"
+	stCode, err := UpdateOrganizationTest(t, org, User1.Name, User1.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(stCode)
+	if stCode != 200 {
+		t.Fatal("Update Organization Failed.")
+	}
+}
+
+// delete
 func DeleteOrganizationTest(t *testing.T, OrgName, userName, password string) (int, error) {
 
 	req, err := http.NewRequest("DELETE", setting.ListenMode+"://"+Domains+"/uam/organization/"+OrgName, nil)

@@ -40,7 +40,7 @@ func Test_teamusermapInit(t *testing.T) {
 	signUp(User1, t)
 
 	User2 = &dao.User{
-		Name:     "User2",
+		Name:     "user2",
 		Email:    "User2@gmail.com",
 		Password: "aaaaa",
 		RealName: "User2",
@@ -51,7 +51,7 @@ func Test_teamusermapInit(t *testing.T) {
 	signUp(User2, t)
 
 	User3 = &dao.User{
-		Name:     "User3",
+		Name:     "user3",
 		Email:    "User3@gmail.com",
 		Password: "aaaaa",
 		RealName: "User3",
@@ -82,7 +82,7 @@ func Test_teamusermapInit(t *testing.T) {
 
 	//3, create team
 	teams = &dao.Team{
-		Name: "HWTeam",
+		Name: "hw_team",
 		Org:  Org,
 	}
 
@@ -191,7 +191,7 @@ func Test_OrgAdminAddNonOrgUserToTeam(t *testing.T) {
 	}
 }
 
-//TeamAdmin Add User2 To Team
+//TeamAdmin Add User2 To soft_team
 func Test_TeamAdminAddUserToTeam(t *testing.T) {
 
 	//1. add User2 to organization
@@ -204,7 +204,7 @@ func Test_TeamAdminAddUserToTeam(t *testing.T) {
 
 	//2. OrgAdmin create team1
 	team1 := &dao.Team{
-		Name: "SoftTeam",
+		Name: "soft_team",
 		Org:  Org,
 	}
 	teamJSON := &controller.TeamJSON{
@@ -240,7 +240,7 @@ func Test_TeamAdminAddUserToTeam(t *testing.T) {
 	}
 }
 
-//sysAdmin Add User To Team
+//sysAdmin Add User2 To hw_team
 func Test_sysAdminAddOrgUserToTeam(t *testing.T) {
 
 	sysAdmin := &dao.User{
@@ -263,6 +263,131 @@ func Test_sysAdminAddOrgUserToTeam(t *testing.T) {
 	if statusCode != 200 {
 		t.Fatal("Add User To Team Error")
 	}
+}
+
+func UpdateTeamUserMap(t *testing.T, tumJSON *controller.TeamUserMapJSON, username, password string) (int, error) {
+	body, _ := json.Marshal(tumJSON)
+	req, err := http.NewRequest("PUT", setting.ListenMode+"://"+Domains+"/uam/team/updateteamusermap", bytes.NewBuffer(body))
+	if err != nil {
+		return -1, err
+	}
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	req.SetBasicAuth(username, password)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return -1, err
+	}
+	return resp.StatusCode, nil
+}
+
+//sysAdmin Update TeamUserMap
+func Test_sysAdminUpdateTeamUserMap(t *testing.T) {
+
+	sysAdmin := &dao.User{
+		Name:     "root",
+		Password: "root",
+	}
+
+	tumJSON := &controller.TeamUserMapJSON{
+		TeamName: teams.Name,
+		OrgName:  Org.Name,
+		UserName: User2.Name,
+		Role:     dao.TEAMADMIN,
+	}
+
+	statusCode, err := UpdateTeamUserMap(t, tumJSON, sysAdmin.Name, sysAdmin.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode != 200 {
+		t.Fatal("Update TeamUserMap Failed")
+	}
+}
+
+//OrgAdmin Update TeamUserMap
+func Test_orgAdminUpdateTeamUserMap(t *testing.T) {
+
+	tumJSON := &controller.TeamUserMapJSON{
+		TeamName: teams.Name,
+		OrgName:  Org.Name,
+		UserName: User2.Name,
+		Role:     dao.TEAMMEMBER,
+	}
+
+	statusCode, err := UpdateTeamUserMap(t, tumJSON, OrgAdmin.Name, OrgAdmin.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode != 200 {
+		t.Fatal("Update TeamUserMap Failed")
+	}
+}
+
+//orgmember(soft_team) Update TeamUserMap
+func Test_orgMemberUpdateTeamUserMap(t *testing.T) {
+
+	tumJSON := &controller.TeamUserMapJSON{
+		TeamName: "soft_team",
+		OrgName:  Org.Name,
+		UserName: User2.Name,
+		Role:     dao.TEAMADMIN,
+	}
+
+	statusCode, err := UpdateTeamUserMap(t, tumJSON, User3.Name, User3.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode == 200 {
+		t.Fatal("Update TeamUserMap Error")
+	}
+}
+
+//teamMember(soft_team) Update TeamUserMap
+func Test_teamMemberUpdateTeamUserMap(t *testing.T) {
+
+	tumJSON := &controller.TeamUserMapJSON{
+		TeamName: "soft_team",
+		OrgName:  Org.Name,
+		UserName: User2.Name,
+		Role:     dao.TEAMADMIN,
+	}
+
+	statusCode, err := UpdateTeamUserMap(t, tumJSON, User2.Name, User2.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode == 200 {
+		t.Fatal("Update TeamUserMap Error")
+	}
+}
+
+//teamAdmin(soft_team) Update TeamUserMap
+func Test_teamAdminUpdateTeamUserMap(t *testing.T) {
+
+	tumJSON := &controller.TeamUserMapJSON{
+		TeamName: "soft_team",
+		OrgName:  Org.Name,
+		UserName: User2.Name,
+		Role:     dao.TEAMADMIN,
+	}
+
+	statusCode, err := UpdateTeamUserMap(t, tumJSON, User1.Name, User1.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode != 200 {
+		t.Fatal("Update TeamUserMap Failed")
+	}
+
+	//if not update back it will affect below test func
+	tumJSON.Role = dao.TEAMMEMBER
+	UpdateTeamUserMap(t, tumJSON, User1.Name, User1.Password)
 }
 
 func RemoveUserFromTeam(t *testing.T, orgName, teamName, teamMember, username, password string) (int, error) {
@@ -318,7 +443,7 @@ func Test_OrgAdminRemoveUserFromTeam(t *testing.T) {
 //TeamMember Remove User2 From Team
 func Test_TeamMemberRemoveUserFromTeam(t *testing.T) {
 
-	statusCode, err := RemoveUserFromTeam(t, Org.Name, "SoftTeam", User2.Name, User2.Name, User2.Password)
+	statusCode, err := RemoveUserFromTeam(t, Org.Name, "soft_team", User2.Name, User2.Name, User2.Password)
 	if err != nil {
 		t.Error(err)
 	}
@@ -332,7 +457,7 @@ func Test_TeamMemberRemoveUserFromTeam(t *testing.T) {
 //TeamAdmin Remove User2 From Team
 func Test_TeamAdminRemoveUserFromTeam(t *testing.T) {
 
-	statusCode, err := RemoveUserFromTeam(t, Org.Name, "SoftTeam", User2.Name, User1.Name, User1.Password)
+	statusCode, err := RemoveUserFromTeam(t, Org.Name, "soft_team", User2.Name, User1.Name, User1.Password)
 	if err != nil {
 		t.Error(err)
 	}
@@ -341,13 +466,12 @@ func Test_TeamAdminRemoveUserFromTeam(t *testing.T) {
 		t.Log(statusCode)
 		t.Fatal("Remove User From Team Failed")
 	}
-
 }
 
 //Non TeamMember Remove TeamAdmin From Team
 func Test_NonTeamMemberRemoveTeamAdminFromTeam(t *testing.T) {
 
-	statusCode, err := RemoveUserFromTeam(t, Org.Name, "SoftTeam", User1.Name, User2.Name, User2.Password)
+	statusCode, err := RemoveUserFromTeam(t, Org.Name, "soft_team", User1.Name, User2.Name, User2.Password)
 	if err != nil {
 		t.Error(err)
 	}
@@ -370,14 +494,14 @@ func Test_NonTeamMemberRemoveUserFromTeam(t *testing.T) {
 
 	//OrgAdmin Add User3 To SoftTeam
 	tumJSON := &controller.TeamUserMapJSON{
-		TeamName: "SoftTeam",
+		TeamName: "soft_team",
 		OrgName:  Org.Name,
 		UserName: User3.Name,
 		Role:     dao.TEAMMEMBER,
 	}
 	AddUserToTeam(t, tumJSON, OrgAdmin.Name, OrgAdmin.Password)
 
-	statusCode, err := RemoveUserFromTeam(t, Org.Name, "SoftTeam", User3.Name, User2.Name, User2.Password)
+	statusCode, err := RemoveUserFromTeam(t, Org.Name, "soft_team", User3.Name, User2.Name, User2.Password)
 	if err != nil {
 		t.Error(err)
 	}

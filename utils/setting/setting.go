@@ -108,15 +108,22 @@ var (
 	Issuer     string
 	PrivateKey string
 	Expiration int64
+	NameSpace  string
 	Authn      string
 )
 
-// ldap authn
 var (
+	// ldap authn && huaweiw3 authn
 	Addr                  string
-	TLS                   bool
 	InsecureTLSSkipVerify bool
-	Domain                string
+	CertFile              string
+
+	// for ldap
+	TransportMethod string
+	BaseDN          string
+	Filter          string
+	BindDN          string
+	BindPassword    string
 )
 
 // login auth of Dockyard
@@ -479,6 +486,13 @@ func setAuthServerConfig(conf config.Configer) error {
 	} else {
 		Expiration = expiration
 	}
+
+	if ns := conf.String("auth_server::namespace"); ns != "" {
+		NameSpace = ns
+	} else {
+		err = fmt.Errorf("auth_server namespace config value error")
+	}
+
 	if authn := conf.String("auth_server::authn"); authn != "" {
 		Authn = authn
 	} else {
@@ -490,21 +504,73 @@ func setAuthServerConfig(conf config.Configer) error {
 		} else {
 			err = fmt.Errorf("authn_ldap addr config value error")
 		}
-		if tls, err := conf.Bool("authn_ldap::tls"); err != nil {
-			err = fmt.Errorf("authn_ldap tls config value error")
+
+		if transportMethod := conf.String("authn_ldap::transportmethod"); transportMethod != "" {
+			TransportMethod = transportMethod
 		} else {
-			TLS = tls
+			err = fmt.Errorf("authn_ldap transportmethod config value error")
 		}
+
+		if baseDN := conf.String("authn_ldap::basedn"); baseDN != "" {
+			BaseDN = baseDN
+		} else {
+			err = fmt.Errorf("authn_ldap basedn config value error")
+		}
+
+		if filter := conf.String("authn_ldap::filter"); filter != "" {
+			Filter = filter
+		} else {
+			err = fmt.Errorf("authn_ldap filter config value error")
+		}
+
+		if bindDN := conf.String("authn_ldap::binddn"); bindDN != "" {
+			BindDN = bindDN
+		} else {
+			err = fmt.Errorf("authn_ldap binddn config value error")
+		}
+
+		if bindPassword := conf.String("authn_ldap::bindpassword"); bindPassword != "" {
+			BindPassword = bindPassword
+		} else {
+			err = fmt.Errorf("authn_ldap bindpassword config value error")
+		}
+
 		if insecureTLSSkipVerify, err := conf.Bool("authn_ldap::insecuretlsskipverify"); err != nil {
 			err = fmt.Errorf("authn_ldap insecuretlsskipverify config value error")
 		} else {
 			InsecureTLSSkipVerify = insecureTLSSkipVerify
 		}
-		if domain := conf.String("authn_ldap::domain"); domain != "" {
-			Domain = domain
-		} else {
-			err = fmt.Errorf("authn_ldap domain config value error")
+		if TransportMethod != "plain" && !InsecureTLSSkipVerify {
+			if certFile := conf.String("authn_ldap::certfile"); certFile != "" {
+				CertFile = certFile
+			} else {
+				err = fmt.Errorf("authn_ldap certfile config value error")
+			}
 		}
+	} else if Authn == "authn_huaweiw3" {
+		if addr := conf.String("authn_huaweiw3::addr"); addr != "" {
+			Addr = addr
+		} else {
+			err = fmt.Errorf("authn_huaweiw3 addr config value error")
+		}
+
+		if insecureTLSSkipVerify, err := conf.Bool("authn_huaweiw3::insecuretlsskipverify"); err != nil {
+			err = fmt.Errorf("authn_huaweiw3 insecuretlsskipverify config value error")
+		} else {
+			InsecureTLSSkipVerify = insecureTLSSkipVerify
+		}
+
+		if !InsecureTLSSkipVerify {
+			if certFile := conf.String("authn_huaweiw3::certfile"); certFile != "" {
+				CertFile = certFile
+			} else {
+				err = fmt.Errorf("authn_huaweiw3 certfile config value error")
+			}
+		}
+	} else if Authn == "authn_db" {
+
+	} else {
+		err = fmt.Errorf("auth_server::authn error,should be authn_db, authn_ldap or authn_huaweiw3")
 	}
 
 	return err

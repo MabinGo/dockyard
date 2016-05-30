@@ -167,6 +167,106 @@ func Test_AdminAddNonExistedUserToOrganization(t *testing.T) {
 	}
 }
 
+func UpdateOrganizationUserMapTest(t *testing.T, oumJSON *controller.OrganizationUserMapJSON,
+	userName, password string) (int, error) {
+
+	body, _ := json.Marshal(oumJSON)
+	req, err := http.NewRequest("PUT", setting.ListenMode+"://"+Domains+"/uam/organization/updateorganizationusermap",
+		bytes.NewBuffer(body))
+	if err != nil {
+		return -1, err
+	}
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	req.SetBasicAuth(userName, password)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return -1, err
+	}
+	return resp.StatusCode, nil
+}
+
+//OrgAdmin Update OrganizationUserMap
+func Test_OrgAdminUpdateOrganizationUserMap(t *testing.T) {
+	oumJSON := &controller.OrganizationUserMapJSON{
+		UserName: user1.Name,
+		Role:     dao.ORGADMIN,
+		OrgName:  Org.Name,
+	}
+
+	statusCode, err := UpdateOrganizationUserMapTest(t, oumJSON, OrgAdmin.Name, OrgAdmin.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode != 200 {
+		t.Fatal("Update OrganizationUserMap Failed.")
+	}
+}
+
+//sysAdmin Update OrganizationUserMap
+func Test_sysAdminUpdateOrganizationUserMap(t *testing.T) {
+	sysAdmin := &dao.User{
+		Name:     "root",
+		Password: "root",
+	}
+	oumJSON := &controller.OrganizationUserMapJSON{
+		UserName: user1.Name,
+		Role:     dao.ORGMEMBER,
+		OrgName:  Org.Name,
+	}
+
+	statusCode, err := UpdateOrganizationUserMapTest(t, oumJSON, sysAdmin.Name, sysAdmin.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode != 200 {
+		t.Fatal("Update OrganizationUserMap Failed.")
+	}
+}
+
+//sysAdmin Update non exist OrganizationUserMap
+func Test_sysAdminUpdateNonExistOrganizationUserMap(t *testing.T) {
+	sysAdmin := &dao.User{
+		Name:     "root",
+		Password: "root",
+	}
+	oumJSON := &controller.OrganizationUserMapJSON{
+		UserName: sysAdmin.Name,
+		Role:     dao.ORGMEMBER,
+		OrgName:  "empty_oum",
+	}
+
+	statusCode, err := UpdateOrganizationUserMapTest(t, oumJSON, sysAdmin.Name, sysAdmin.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode == 200 {
+		t.Fatal("Update OrganizationUserMap Failed.")
+	}
+}
+
+// orgMember (user1) Update OrganizationUserMap
+func Test_orgMemberUpdateOrganizationUserMap(t *testing.T) {
+
+	oumJSON := &controller.OrganizationUserMapJSON{
+		UserName: user1.Name,
+		Role:     dao.ORGADMIN,
+		OrgName:  Org.Name,
+	}
+
+	statusCode, err := UpdateOrganizationUserMapTest(t, oumJSON, user1.Name, user1.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode == 200 {
+		t.Fatal("Update OrganizationUserMap Error.")
+	}
+}
+
 func Test_RemoveUserInit(t *testing.T) {
 	//add user2 to Organization
 	oumJSON := &controller.OrganizationUserMapJSON{

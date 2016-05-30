@@ -1,9 +1,7 @@
 package authtest
 
 import (
-	"crypto/tls"
 	"encoding/json"
-	"net/http"
 	"strings"
 	"testing"
 
@@ -12,86 +10,18 @@ import (
 	"github.com/containerops/dockyard/utils/setting"
 )
 
-var (
-	sysAdmin, orgAdmin, orgMember, teamAdmin, teamMember *dao.User
-	org                                                  *dao.Organization
-	team                                                 *controller.TeamJSON
-)
-
 func Test_RepositoryInit(t *testing.T) {
-	sysAdmin = &dao.User{
-		Name:     "root",
-		Password: "root",
-		RealName: "root",
-	}
-	orgAdmin = &dao.User{
-		Name:     "admin",
-		Email:    "admin@huawei.com",
-		Password: "admin",
-		RealName: "admin",
-		Comment:  "commnet",
-	}
-	orgMember = &dao.User{
-		Name:     "member",
-		Email:    "member@huawei.com",
-		Password: "123456",
-	}
-	teamAdmin = &dao.User{
-		Name:     "teamadmin",
-		Email:    "teamadmin@huawei.com",
-		Password: "123456",
-	}
-	teamMember = &dao.User{
-		Name:     "user",
-		Email:    "user@huawei.com",
-		Password: "123456",
-	}
-	org = &dao.Organization{
-		Name:            "huawei",
-		MemberPrivilege: dao.WRITE,
-	}
-	team = &controller.TeamJSON{
-		TeamName: "team",
-		OrgName:  "huawei",
-	}
-	oum1 := &controller.OrganizationUserMapJSON{
-		UserName: orgMember.Name,
-		Role:     dao.ORGMEMBER,
-		OrgName:  org.Name,
-	}
-	oum2 := &controller.OrganizationUserMapJSON{
-		UserName: teamAdmin.Name,
-		Role:     dao.ORGMEMBER,
-		OrgName:  org.Name,
-	}
-	oum3 := &controller.OrganizationUserMapJSON{
-		UserName: teamMember.Name,
-		Role:     dao.ORGMEMBER,
-		OrgName:  org.Name,
-	}
-	tum1 := &controller.TeamUserMapJSON{
-		TeamName: "team",
-		OrgName:  "huawei",
-		UserName: teamAdmin.Name,
-		Role:     dao.TEAMADMIN,
-	}
-	tum2 := &controller.TeamUserMapJSON{
-		TeamName: "team",
-		OrgName:  "huawei",
-		UserName: teamMember.Name,
-		Role:     dao.TEAMMEMBER,
-	}
 	signUp(orgAdmin, t)
 	signUp(orgMember, t)
 	signUp(teamAdmin, t)
 	signUp(teamMember, t)
-	createOrganization(org, t)
-	addUserToOrganization(oum1, t)
-	addUserToOrganization(oum2, t)
-	addUserToOrganization(oum3, t)
-	createTeam(team, t)
-	addUserToTeam(tum1, t)
-	addUserToTeam(tum2, t)
+	createOrganization(org1, orgAdmin, t)
+	addUserToOrganization(oum1, orgAdmin, t)
+	addUserToOrganization(oum2, orgAdmin, t)
+	addUserToOrganization(oum3, orgAdmin, t)
+	createTeam(team1, orgAdmin, t)
+	addUserToTeam(tum1, orgAdmin, t)
+	addUserToTeam(tum2, orgAdmin, t)
 }
 
 // Create repository test
@@ -103,30 +33,21 @@ func Test_UserCreateRepository(t *testing.T) {
 		UserName: orgAdmin.Name,
 	}
 
-	statusCode, err := createRepository(repo, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
+	if err := createRepository(repo, orgAdmin); err != nil {
 		t.Error(err)
-	}
-	if statusCode != 200 {
-		t.Fatal("CreateRepository Failed.")
 	}
 }
 
 func Test_SysAdminCreateMemberRepository(t *testing.T) {
 	repo := &controller.RepositoryJSON{
-		Name:     "testSys",
+		Name:     "test_sys",
 		IsPublic: true,
 		Comment:  "this is a repo",
 		UserName: orgMember.Name,
 	}
 
-	statusCode, err := createRepository(repo, sysAdmin.Name, sysAdmin.Password)
-	if err != nil {
+	if err := createRepository(repo, sysAdmin); err != nil {
 		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("CreateRepository Failed.")
 	}
 }
 
@@ -138,13 +59,10 @@ func Test_UserCreateExistedRepository(t *testing.T) {
 		UserName: orgAdmin.Name,
 	}
 
-	statusCode, err := createRepository(repo, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("CreateRepository Failed.")
+	if err := createRepository(repo, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
@@ -153,13 +71,10 @@ func Test_UserCreateEmptyRepository(t *testing.T) {
 		UserName: orgAdmin.Name,
 	}
 
-	statusCode, err := createRepository(repo, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("CreateRepository Failed.")
+	if err := createRepository(repo, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
@@ -169,13 +84,8 @@ func Test_UserCreateMissingIsPublicRepository(t *testing.T) {
 		UserName: orgAdmin.Name,
 	}
 
-	statusCode, err := createRepository(repo, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
+	if err := createRepository(repo, orgAdmin); err != nil {
 		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("CreateRepository Failed.")
 	}
 }
 
@@ -187,13 +97,10 @@ func Test_NonExistedUserCreateRepository(t *testing.T) {
 		UserName: "nonexisted",
 	}
 
-	statusCode, err := createRepository(repo, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("CreateRepository Failed.")
+	if err := createRepository(repo, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
@@ -202,17 +109,14 @@ func Test_UserAndOrgExistedCreateRepository(t *testing.T) {
 		Name:     "existed",
 		IsPublic: true,
 		Comment:  "this is a repo",
-		OrgName:  org.Name,
+		OrgName:  org1.Name,
 		UserName: orgAdmin.Name,
 	}
 
-	statusCode, err := createRepository(repo, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("CreateRepository Failed.")
+	if err := createRepository(repo, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
@@ -223,65 +127,47 @@ func Test_UserAndOrgNonExistedCreateRepository(t *testing.T) {
 		Comment:  "this is a repo",
 	}
 
-	statusCode, err := createRepository(repo, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("CreateRepository Failed.")
+	if err := createRepository(repo, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_OrgCreateRepository(t *testing.T) {
 	repo := &controller.RepositoryJSON{
-		Name:     "testOrg",
+		Name:     "test_org",
 		IsPublic: true,
 		Comment:  "this is a repo",
-		OrgName:  org.Name,
+		OrgName:  org1.Name,
 	}
 
-	statusCode, err := createRepository(repo, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
+	if err := createRepository(repo, orgAdmin); err != nil {
 		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("CreateRepository Failed.")
 	}
 }
 
 func Test_SysAdminCreateOrgRepository(t *testing.T) {
 	repo := &controller.RepositoryJSON{
-		Name:     "testAdmin",
+		Name:     "test_admin",
 		IsPublic: true,
 		Comment:  "this is a repo",
-		OrgName:  org.Name,
+		OrgName:  org1.Name,
 	}
 
-	statusCode, err := createRepository(repo, sysAdmin.Name, sysAdmin.Password)
-	if err != nil {
+	if err := createRepository(repo, sysAdmin); err != nil {
 		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("CreateRepository Failed.")
 	}
 }
 
 func Test_OrgCreateMissingIspublicRepository(t *testing.T) {
 	repo := &controller.RepositoryJSON{
 		Name:    "test1",
-		OrgName: org.Name,
+		OrgName: org1.Name,
 	}
 
-	statusCode, err := createRepository(repo, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
+	if err := createRepository(repo, orgAdmin); err != nil {
 		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("CreateRepository Failed.")
 	}
 }
 
@@ -293,13 +179,10 @@ func Test_NonExistedOrgCreateRepository(t *testing.T) {
 		OrgName:  "nonexisted",
 	}
 
-	statusCode, err := createRepository(repo, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("CreateRepository Failed.")
+	if err := createRepository(repo, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
@@ -308,594 +191,618 @@ func Test_NoOrgRightToCreateRepository(t *testing.T) {
 		Name:     "test2",
 		IsPublic: true,
 		Comment:  "this is a repo",
-		OrgName:  org.Name,
+		OrgName:  org1.Name,
 	}
 
-	statusCode, err := createRepository(repo, orgMember.Name, orgMember.Password)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("CreateRepository Failed.")
+	if err := createRepository(repo, orgMember); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_TeamAddRepository(t *testing.T) {
 	repo := &controller.TeamRepositoryMapJSON{
-		OrgName:  team.OrgName,
+		OrgName:  team1.OrgName,
 		RepoName: "test1",
-		TeamName: team.TeamName,
+		TeamName: team1.TeamName,
 		Permit:   dao.WRITE,
 	}
 
-	statusCode, err := addRepository(repo, teamAdmin.Name, teamAdmin.Password)
-	if err != nil {
+	if err := addRepository(repo, teamAdmin); err != nil {
 		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("AddRepository Failed.")
 	}
 }
 
 func Test_SysAddTeamRepository(t *testing.T) {
 	repo := &controller.TeamRepositoryMapJSON{
-		OrgName:  team.OrgName,
-		RepoName: "testAdmin",
-		TeamName: team.TeamName,
+		OrgName:  team1.OrgName,
+		RepoName: "test_admin",
+		TeamName: team1.TeamName,
 		Permit:   dao.WRITE,
 	}
 
-	statusCode, err := addRepository(repo, sysAdmin.Name, sysAdmin.Password)
-	if err != nil {
+	if err := addRepository(repo, sysAdmin); err != nil {
 		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("AddRepository Failed.")
 	}
 }
 
 func Test_OrgMemberAddTeamRepository(t *testing.T) {
 	repo := &controller.TeamRepositoryMapJSON{
-		OrgName:  team.OrgName,
-		RepoName: "testOrg",
-		TeamName: team.TeamName,
+		OrgName:  team1.OrgName,
+		RepoName: "test_org",
+		TeamName: team1.TeamName,
 		Permit:   dao.WRITE,
 	}
 
-	statusCode, err := addRepository(repo, orgMember.Name, orgMember.Password)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("AddRepository Failed.")
+	if err := addRepository(repo, orgMember); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_OrgAdminAddTeamRepository(t *testing.T) {
 	repo := &controller.TeamRepositoryMapJSON{
-		OrgName:  team.OrgName,
-		RepoName: "testOrg",
-		TeamName: team.TeamName,
+		OrgName:  team1.OrgName,
+		RepoName: "test_org",
+		TeamName: team1.TeamName,
 		Permit:   dao.WRITE,
 	}
 
-	statusCode, err := addRepository(repo, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
+	if err := addRepository(repo, orgAdmin); err != nil {
 		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("AddRepository Failed.")
 	}
 }
 
 func Test_TeamAddNonexistRepository(t *testing.T) {
 	repo := &controller.TeamRepositoryMapJSON{
-		OrgName:  team.OrgName,
+		OrgName:  team1.OrgName,
 		RepoName: "nonexist",
-		TeamName: team.TeamName,
+		TeamName: team1.TeamName,
 		Permit:   dao.WRITE,
 	}
 
-	statusCode, err := addRepository(repo, teamAdmin.Name, teamAdmin.Password)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("AddRepository Failed.")
+	if err := addRepository(repo, teamAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_NoRightToAddRepository(t *testing.T) {
 	repo := &controller.TeamRepositoryMapJSON{
-		OrgName:  team.OrgName,
+		OrgName:  team1.OrgName,
 		RepoName: "test",
-		TeamName: team.TeamName,
+		TeamName: team1.TeamName,
 		Permit:   dao.WRITE,
 	}
 
-	statusCode, err := addRepository(repo, teamMember.Name, teamMember.Password)
-	if err != nil {
+	if err := addRepository(repo, teamMember); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
+	}
+}
+
+// Update Repository Test
+// orgAdmin update Org repository
+func Test_orgAdminUpdateOrgRepository(t *testing.T) {
+	repo := &controller.RepositoryJSON{
+		Name:     "test_org",
+		IsPublic: false,
+		Comment:  "orgAdmin update repo",
+		OrgName:  org1.Name,
+	}
+
+	if err := updateRepository(repo, orgAdmin); err != nil {
 		t.Error(err)
 	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("AddRepository Failed.")
+}
+
+// sysAdmin update Org repository
+func Test_sysAdminUpdateOrgRepository(t *testing.T) {
+	repo := &controller.RepositoryJSON{
+		Name:     "test_org",
+		IsPublic: true,
+		Comment:  "sysAdmin update repo",
+		OrgName:  org1.Name,
+	}
+
+	if err := updateRepository(repo, sysAdmin); err != nil {
+		t.Error(err)
+	}
+}
+
+// orgMember update Org repository
+func Test_orgMemberUpdateOrgRepository(t *testing.T) {
+	repo := &controller.RepositoryJSON{
+		Name:     "test_org",
+		IsPublic: false,
+		Comment:  "orgMember update repo",
+		OrgName:  org1.Name,
+	}
+
+	if err := updateRepository(repo, orgMember); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
+	}
+}
+
+// non-exist user update Org repository
+func Test_nonExistUserUpdateOrgRepository(t *testing.T) {
+	repo := &controller.RepositoryJSON{
+		Name:     "test_org",
+		IsPublic: false,
+		Comment:  "orgMember update repo",
+		OrgName:  org1.Name,
+	}
+
+	user := &dao.User{
+		Name:     "tempuser",
+		Password: "123456abc",
+	}
+
+	if err := updateRepository(repo, user); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
+	}
+}
+
+// sysAdmin update Org non-exist repository
+func Test_UpdateOrgNonExistRepository(t *testing.T) {
+	repo := &controller.RepositoryJSON{
+		Name:     "nonexistrepo",
+		IsPublic: true,
+		Comment:  "sysAdmin update repo",
+		OrgName:  org1.Name,
+	}
+
+	if err := updateRepository(repo, sysAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
+	}
+}
+
+//  update non-exist Org repository
+func Test_UpdateNonExistOrgRepository(t *testing.T) {
+	repo := &controller.RepositoryJSON{
+		Name:     "test_org",
+		IsPublic: true,
+		Comment:  "orgAdmin update repo",
+		OrgName:  "nonexistorg",
+	}
+
+	if err := updateRepository(repo, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
+	}
+}
+
+// update user repository
+func Test_userUpdateRepository(t *testing.T) {
+	//1.create user repo
+	repo := &controller.RepositoryJSON{
+		Name:     "user_repo",
+		IsPublic: true,
+		Comment:  "this is a repo",
+		UserName: orgMember.Name,
+	}
+	createRepository(repo, orgMember)
+
+	//2.update
+	repo.IsPublic = true
+	repo.Comment = "orgMember update repo"
+
+	if err := updateRepository(repo, orgMember); err != nil {
+		t.Error(err)
+	}
+}
+
+// someone update other user repository
+func Test_userUpdateOtherUserRepository(t *testing.T) {
+	repo := &controller.RepositoryJSON{
+		Name:     "user_repo",
+		IsPublic: false,
+		Comment:  "orgAdmin update repo",
+		UserName: orgMember.Name,
+	}
+
+	if err := updateRepository(repo, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
+	}
+}
+
+// sysAdmin update user repository
+func Test_sysAdminUpdateUserRepository(t *testing.T) {
+	repo := &controller.RepositoryJSON{
+		Name:     "user_repo",
+		IsPublic: false,
+		Comment:  "sysAdmin update repo",
+		UserName: orgMember.Name, //UserName: sysAdmin.Name,
+	}
+
+	if err := updateRepository(repo, sysAdmin); err != nil {
+		t.Error(err)
+	}
+}
+
+//Update TeamRepositoryMap Test
+// teamAdmin update team repository map
+func Test_teamAdminUpdateTeamRepository(t *testing.T) {
+	repo := &controller.TeamRepositoryMapJSON{
+		OrgName:  team1.OrgName,
+		RepoName: "test1",
+		TeamName: team1.TeamName,
+		Permit:   dao.READ,
+	}
+
+	//update
+	if err := updateTeamRepositoryMap(repo, teamAdmin); err != nil {
+		t.Error(err)
+	}
+}
+
+// orgAdmin update team repository map
+func Test_orgAdminUpdateTeamRepository(t *testing.T) {
+	repo := &controller.TeamRepositoryMapJSON{
+		OrgName:  team1.OrgName,
+		RepoName: "test1",
+		TeamName: team1.TeamName,
+		Permit:   dao.WRITE,
+	}
+
+	if err := updateTeamRepositoryMap(repo, orgAdmin); err != nil {
+		t.Error(err)
+	}
+}
+
+// sysAdmin update team repository map
+func Test_sysAdminUpdateTeamRepository(t *testing.T) {
+	repo := &controller.TeamRepositoryMapJSON{
+		OrgName:  team1.OrgName,
+		RepoName: "test1",
+		TeamName: team1.TeamName,
+		Permit:   dao.READ,
+	}
+
+	if err := updateTeamRepositoryMap(repo, sysAdmin); err != nil {
+		t.Error(err)
+	}
+}
+
+// teamMember update team repository map
+func Test_teamMemberUpdateTeamRepository(t *testing.T) {
+	repo := &controller.TeamRepositoryMapJSON{
+		OrgName:  team1.OrgName,
+		RepoName: "test1",
+		TeamName: team1.TeamName,
+		Permit:   dao.WRITE,
+	}
+
+	if err := updateTeamRepositoryMap(repo, teamMember); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
+	}
+}
+
+// other user update team repository map
+func Test_orgMemberUpdateTeamRepository(t *testing.T) {
+	repo := &controller.TeamRepositoryMapJSON{
+		OrgName:  team1.OrgName,
+		RepoName: "test1",
+		TeamName: team1.TeamName,
+		Permit:   dao.WRITE,
+	}
+
+	if err := updateTeamRepositoryMap(repo, orgMember); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
+	}
+}
+
+// orgAdmin update not right org team repository map
+func Test_orgAdminUpdateNotRightTeamRepository(t *testing.T) {
+	repo := &controller.TeamRepositoryMapJSON{
+		OrgName:  "emptyorg",
+		RepoName: "test1",
+		TeamName: team1.TeamName,
+		Permit:   dao.WRITE,
+	}
+
+	if err := updateTeamRepositoryMap(repo, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
+	}
+}
+
+// orgAdmin update non exist team repository map
+func Test_orgAdminUpdateNonExistTeamRepository(t *testing.T) {
+	repo := &controller.TeamRepositoryMapJSON{
+		OrgName:  team1.OrgName,
+		RepoName: "nonexist",
+		TeamName: team1.TeamName,
+		Permit:   dao.WRITE,
+	}
+
+	if err := updateTeamRepositoryMap(repo, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
+	}
+}
+
+// orgAdmin update non exist team repository map
+func Test_orgAdminUpdateEmptyTeamRepository(t *testing.T) {
+	repo := &controller.TeamRepositoryMapJSON{
+		OrgName:  team1.OrgName,
+		RepoName: "test1",
+		TeamName: "emptyteam",
+		Permit:   dao.WRITE,
+	}
+
+	if err := updateTeamRepositoryMap(repo, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 // Delete Test
 func Test_NamespaceEmptyDeleteRepository(t *testing.T) {
-	repository := "testOrg"
-	statusCode, err := deleteRepository("", repository, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
-		t.Error(t)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("DeleteRepository Failed.")
+	repository := "test_org"
+	if err := deleteRepository("", repository, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_NonRightUserDeleteRepository(t *testing.T) {
 	username := orgAdmin.Name
 	repository := "test"
-	statusCode, err := deleteRepository(username, repository, orgMember.Name, orgMember.Password)
-	if err != nil {
-		t.Error(t)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("UserDeleteRepository Failed.")
+	if err := deleteRepository(username, repository, orgMember); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_UserDeleteNonExistedRepository(t *testing.T) {
 	username := orgAdmin.Name
 	repository := "nonexisted"
-	statusCode, err := deleteRepository(username, repository, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
-		t.Error(t)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("UserDeleteRepository Failed.")
+	if err := deleteRepository(username, repository, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_UserDeleteRepository(t *testing.T) {
 	username := orgAdmin.Name
 	repository := "test"
-	statusCode, err := deleteRepository(username, repository, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
-		t.Error(t)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("UserDeleteRepository Failed.")
+	if err := deleteRepository(username, repository, orgAdmin); err != nil {
+		t.Error(err)
 	}
 }
 
 func Test_SysAdminDeleteRepository(t *testing.T) {
 	username := orgMember.Name
-	repository := "testSys"
-	statusCode, err := deleteRepository(username, repository, sysAdmin.Name, sysAdmin.Password)
-	if err != nil {
-		t.Error(t)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("UserDeleteRepository Failed.")
+	repository := "test_sys"
+	if err := deleteRepository(username, repository, sysAdmin); err != nil {
+		t.Error(err)
 	}
 }
 
 func Test_NonExistedOrgDeleteRepository(t *testing.T) {
 	orgname := "nonexisted"
-	repository := "testOrg"
-	statusCode, err := deleteRepository(orgname, repository, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
-		t.Error(t)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("OrgDeleteRepository Failed.")
+	repository := "test_org"
+	if err := deleteRepository(orgname, repository, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_NonRightOrgDeleteRepository(t *testing.T) {
-	orgname := org.Name
+	orgname := org1.Name
 	repository := "test"
-	statusCode, err := deleteRepository(orgname, repository, orgMember.Name, orgMember.Password)
-	if err != nil {
-		t.Error(t)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("OrgDeleteRepository Failed.")
+	if err := deleteRepository(orgname, repository, orgMember); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_OrgDeleteNonExistedRepository(t *testing.T) {
-	orgname := org.Name
+	orgname := org1.Name
 	repository := "nonexisted"
-	statusCode, err := deleteRepository(orgname, repository, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
-		t.Error(t)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("OrgDeleteRepository Failed.")
+	if err := deleteRepository(orgname, repository, orgAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_TeamRemoveNonexistRepository(t *testing.T) {
-	orgname := team.OrgName
-	team := team.TeamName
+	orgname := team1.OrgName
+	team := team1.TeamName
 	repository := "nonexist"
 
-	statusCode, err := removeRepository(orgname, team, repository, teamAdmin.Name, teamAdmin.Password)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("RemoveRepository Failed.")
+	if err := removeRepository(orgname, team, repository, teamAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_RemoveNonexistTeamRepository(t *testing.T) {
-	orgname := team.OrgName
+	orgname := team1.OrgName
 	team := "nonexisted"
 	repository := "test1"
 
-	statusCode, err := removeRepository(orgname, team, repository, teamAdmin.Name, teamAdmin.Password)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("RemoveRepository Failed.")
+	if err := removeRepository(orgname, team, repository, teamAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_SysRemoveRepository(t *testing.T) {
-	orgname := team.OrgName
-	team := team.TeamName
-	repository := "testAdmin"
+	orgname := team1.OrgName
+	team := team1.TeamName
+	repository := "test_admin"
 
-	statusCode, err := removeRepository(orgname, team, repository, sysAdmin.Name, sysAdmin.Password)
-	if err != nil {
+	if err := removeRepository(orgname, team, repository, sysAdmin); err != nil {
 		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("RemoveRepository Failed.")
 	}
 }
 
 func Test_OrgMemberRemoveRepository(t *testing.T) {
-	orgname := team.OrgName
-	team := team.TeamName
-	repository := "testOrg"
+	orgname := team1.OrgName
+	team := team1.TeamName
+	repository := "test_org"
 
-	statusCode, err := removeRepository(orgname, team, repository, orgMember.Name, orgMember.Password)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("RemoveRepository Failed.")
+	if err := removeRepository(orgname, team, repository, orgMember); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_OrgAdminRemoveRepository(t *testing.T) {
-	orgname := team.OrgName
-	team := team.TeamName
-	repository := "testOrg"
+	orgname := team1.OrgName
+	team := team1.TeamName
+	repository := "test_org"
 
-	statusCode, err := removeRepository(orgname, team, repository, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
+	if err := removeRepository(orgname, team, repository, orgAdmin); err != nil {
 		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("RemoveRepository Failed.")
 	}
 }
 
 func Test_TeamMemberRemoveRepository(t *testing.T) {
-	orgname := team.OrgName
-	team := team.TeamName
+	orgname := team1.OrgName
+	team := team1.TeamName
 	repository := "test1"
 
-	statusCode, err := removeRepository(orgname, team, repository, teamMember.Name, teamMember.Password)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode == 200 {
-		t.Fatal("RemoveRepository Failed.")
+	if err := removeRepository(orgname, team, repository, teamMember); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
 	}
 }
 
 func Test_TeamAdminRemoveRepository(t *testing.T) {
-	orgname := team.OrgName
-	team := team.TeamName
+	orgname := team1.OrgName
+	team := team1.TeamName
 	repository := "test1"
 
-	statusCode, err := removeRepository(orgname, team, repository, teamAdmin.Name, teamAdmin.Password)
-	if err != nil {
+	if err := removeRepository(orgname, team, repository, teamAdmin); err != nil {
 		t.Error(err)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("RemoveRepository Failed.")
 	}
 }
 
 func Test_OrgDeleteRepository(t *testing.T) {
-	orgname := org.Name
-	repository := "testOrg"
-	statusCode, err := deleteRepository(orgname, repository, orgAdmin.Name, orgAdmin.Password)
-	if err != nil {
-		t.Error(t)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("OrgDeleteRepository Failed.")
+	orgname := org1.Name
+	repository := "test_org"
+	if err := deleteRepository(orgname, repository, orgAdmin); err != nil {
+		t.Error(err)
 	}
 }
 
 func Test_SysAdminDeleteOrgRepository(t *testing.T) {
-	orgname := org.Name
-	repository := "testAdmin"
-	statusCode, err := deleteRepository(orgname, repository, sysAdmin.Name, sysAdmin.Password)
-	if err != nil {
-		t.Error(t)
-	}
-	t.Log(statusCode)
-	if statusCode != 200 {
-		t.Fatal("UserDeleteRepository Failed.")
+	orgname := org1.Name
+	repository := "test_admin"
+	if err := deleteRepository(orgname, repository, sysAdmin); err != nil {
+		t.Error(err)
 	}
 }
 
 func Test_RepositoryClear(t *testing.T) {
-	deleteOrganization(org, t)
-	deleteRepository(orgAdmin.Name, "test1", orgAdmin.Name, orgAdmin.Password)
+	deleteOrganization(org1, orgAdmin, t)
+	deleteRepository(orgAdmin.Name, "test1", orgAdmin)
+	deleteRepository(orgMember.Name, "user_repo", sysAdmin)
 }
 
-func signUp(user *dao.User, t *testing.T) {
-	b, err := json.Marshal(user)
-	if err != nil {
-		t.Error("marshal error.")
-	}
-
-	req, err := http.NewRequest("POST", setting.ListenMode+"://"+Domains+"/uam/user/signup", strings.NewReader(string(b)))
-	if err != nil {
-		t.Error(err)
-	}
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: tr}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(resp)
-}
-
-func createOrganization(org *dao.Organization, t *testing.T) {
-	b, err := json.Marshal(org)
-	if err != nil {
-		t.Error("marshal error.")
-	}
-
-	req, err := http.NewRequest("POST", setting.ListenMode+"://"+Domains+"/uam/organization", strings.NewReader(string(b)))
-	if err != nil {
-		t.Error(err)
-	}
-	req.SetBasicAuth(orgAdmin.Name, orgAdmin.Password)
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: tr}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(resp)
-}
-
-func deleteOrganization(org *dao.Organization, t *testing.T) {
-	req, err := http.NewRequest("DELETE", setting.ListenMode+"://"+Domains+"/uam/organization/"+org.Name, nil)
-	if err != nil {
-		t.Error(err)
-	}
-	req.SetBasicAuth(orgAdmin.Name, orgAdmin.Password)
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: tr}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(resp)
-}
-
-func addUserToOrganization(oumJSON *controller.OrganizationUserMapJSON, t *testing.T) {
-	b, err := json.Marshal(oumJSON)
-	if err != nil {
-		t.Error("marshal error.")
-	}
-
-	req, err := http.NewRequest("POST", setting.ListenMode+"://"+Domains+"/uam/organization/adduser", strings.NewReader(string(b)))
-	if err != nil {
-		t.Error(err)
-	}
-	req.SetBasicAuth(orgAdmin.Name, orgAdmin.Password)
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: tr}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(resp)
-}
-
-func createTeam(teamJson *controller.TeamJSON, t *testing.T) {
-	b, err := json.Marshal(teamJson)
-	if err != nil {
-		t.Error("marshal error.")
-	}
-
-	req, err := http.NewRequest("POST", setting.ListenMode+"://"+Domains+"/uam/team", strings.NewReader(string(b)))
-	if err != nil {
-		t.Error(err)
-	}
-	req.SetBasicAuth(orgAdmin.Name, orgAdmin.Password)
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: tr}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(resp)
-}
-
-func deleteTeam(teamJson *controller.TeamJSON, t *testing.T) {
-	req, err := http.NewRequest("DELETE", setting.ListenMode+"://"+Domains+"/uam/team/"+teamJson.OrgName+"/"+teamJson.TeamName, nil)
-	if err != nil {
-		t.Error(err)
-	}
-	req.SetBasicAuth(orgAdmin.Name, orgAdmin.Password)
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: tr}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(resp)
-}
-
-func addUserToTeam(tum *controller.TeamUserMapJSON, t *testing.T) {
-	b, err := json.Marshal(tum)
-	if err != nil {
-		t.Error("marshal error.")
-	}
-
-	req, err := http.NewRequest("POST", setting.ListenMode+"://"+Domains+"/uam/team/adduser", strings.NewReader(string(b)))
-	if err != nil {
-		t.Error(err)
-	}
-	req.SetBasicAuth(orgAdmin.Name, orgAdmin.Password)
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: tr}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Log(resp)
-}
-
-func createRepository(repo *controller.RepositoryJSON, userName, password string) (int, error) {
+func createRepository(repo *controller.RepositoryJSON, user *dao.User) error {
 	b, err := json.Marshal(repo)
 	if err != nil {
-		return -1, err
+		return err
 	}
 
-	req, err := http.NewRequest("POST", setting.ListenMode+"://"+Domains+"/uam/repository/", strings.NewReader(string(b)))
-	if err != nil {
-		return -1, err
+	url := setting.ListenMode + "://" + Domains + "/uam/repository/"
+	if err = methodFunc("POST", url, strings.NewReader(string(b)), user); err != nil {
+		return err
 	}
-	req.SetBasicAuth(userName, password)
 
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: tr}
-	resp, err := client.Do(req)
-	if err != nil {
-		return -1, err
-	}
-	return resp.StatusCode, nil
+	return nil
 }
 
-func deleteRepository(namespace, repository, userName, password string) (int, error) {
-	req, err := http.NewRequest("DELETE", setting.ListenMode+"://"+Domains+"/uam/repository/"+namespace+"/"+repository, nil)
-	if err != nil {
-		return -1, err
-	}
-	req.SetBasicAuth(userName, password)
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: tr}
-	resp, err := client.Do(req)
-	if err != nil {
-		return -1, err
-	}
-	return resp.StatusCode, nil
-}
-
-func addRepository(repo *controller.TeamRepositoryMapJSON, userName, password string) (int, error) {
+func updateRepository(repo *controller.RepositoryJSON, user *dao.User) error {
 	b, err := json.Marshal(repo)
 	if err != nil {
-		return -1, err
+		return err
 	}
 
-	req, err := http.NewRequest("POST", setting.ListenMode+"://"+Domains+"/uam/team/addrepository", strings.NewReader(string(b)))
-	if err != nil {
-		return -1, err
+	url := setting.ListenMode + "://" + Domains + "/uam/repository/update"
+	if err := methodFunc("PUT", url, strings.NewReader(string(b)), user); err != nil {
+		return err
 	}
-	req.SetBasicAuth(userName, password)
 
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: tr}
-	resp, err := client.Do(req)
-	if err != nil {
-		return -1, err
-	}
-	return resp.StatusCode, nil
+	return nil
 }
 
-func removeRepository(organization, team, repository, userName, password string) (int, error) {
-	req, err := http.NewRequest("DELETE", setting.ListenMode+"://"+Domains+"/uam/team/removerepository/"+organization+"/"+team+"/"+repository, nil)
+func updateTeamRepositoryMap(repo *controller.TeamRepositoryMapJSON, user *dao.User) error {
+	b, err := json.Marshal(repo)
 	if err != nil {
-		return -1, err
+		return err
 	}
-	req.SetBasicAuth(userName, password)
 
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	url := setting.ListenMode + "://" + Domains + "/uam/team/updateteamrepositorymap"
+	if err := methodFunc("PUT", url, strings.NewReader(string(b)), user); err != nil {
+		return err
 	}
-	client := &http.Client{Transport: tr}
-	resp, err := client.Do(req)
+
+	return nil
+}
+
+func deleteRepository(namespace, repository string, user *dao.User) error {
+	url := setting.ListenMode + "://" + Domains + "/uam/repository/" + namespace + "/" + repository
+	if err := methodFunc("DELETE", url, nil, user); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func addRepository(repo *controller.TeamRepositoryMapJSON, user *dao.User) error {
+	b, err := json.Marshal(repo)
 	if err != nil {
-		return -1, err
+		return err
 	}
-	return resp.StatusCode, nil
+
+	url := setting.ListenMode + "://" + Domains + "/uam/team/addrepository"
+	if err = methodFunc("POST", url, strings.NewReader(string(b)), user); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func removeRepository(organization, team, repository string, user *dao.User) error {
+	url := setting.ListenMode + "://" + Domains + "/uam/team/removerepository/" + organization + "/" + team + "/" + repository
+	if err := methodFunc("DELETE", url, nil, user); err != nil {
+		return err
+	}
+
+	return nil
 }

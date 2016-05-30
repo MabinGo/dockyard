@@ -102,23 +102,27 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 		return true, nil
 	}
 
-	//TODO: filter disaster recovery verification temporarily
-	if strings.Compare(ctx.Req.RequestURI, "/syn/adddrc") == 0 {
-		return false, nil
-	}
-
 	if partslen != 2 || sign != "basic" {
 		return false, fmt.Errorf("invalid user name or password")
 	}
 
-	//TODO: support domains/repo format soon
+	if strings.Compare(ctx.Req.RequestURI, "/syn/drc") == 0 {
+		if err := drcVerifyHandler(author); err != nil {
+			return false, err
+		}
+
+		return false, nil
+	}
+
 	var repo string
 	var accessRecords []Access
-
-	namespace := ctx.Params(":namespace")
-	repository := ctx.Params(":repository")
 	w := ctx.Resp
 	r := ctx.Req.Request
+
+	//TODO: support domains/repo format soon
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+
 	if namespace == "" || repository == "" {
 		repo = ""
 	} else {
@@ -202,6 +206,30 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func drcVerifyHandler(author string) error {
+	rawurl := fmt.Sprintf("%s://%s/uam/user/signin", setting.ListenMode, setting.Domains)
+	resp, err := module.SendHttpRequest("GET", rawurl, nil, author)
+	if err != nil {
+		return err
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	u := map[string]interface{}{}
+	if err := json.Unmarshal(body, &u); err != nil {
+		return err
+	}
+
+	if u["Role"].(float64) != 1 {
+		return fmt.Errorf("no authority")
+	}
+
+	return nil
 }
 
 func authorized(ctx *macaron.Context) error {

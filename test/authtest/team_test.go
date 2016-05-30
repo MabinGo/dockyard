@@ -11,6 +11,8 @@ import (
 	"github.com/containerops/dockyard/utils/setting"
 )
 
+var tAdmin, tMember *dao.User
+
 func Test_teamInit(t *testing.T) {
 
 	//1. create user1
@@ -36,6 +38,28 @@ func Test_teamInit(t *testing.T) {
 	}
 	signUp(User2, t)
 
+	tAdmin = &dao.User{
+		Name:     "tadmin",
+		Email:    "tadmin@gmail.com",
+		Password: "tadmin",
+		RealName: "tadmin",
+		Comment:  "Comment",
+		Status:   0,
+		Role:     dao.SYSMEMBER,
+	}
+	signUp(tAdmin, t)
+
+	tMember = &dao.User{
+		Name:     "tmember",
+		Email:    "tmember@gmail.com",
+		Password: "tmember",
+		RealName: "tmember",
+		Comment:  "Comment",
+		Status:   0,
+		Role:     dao.SYSMEMBER,
+	}
+	signUp(tMember, t)
+
 	//2. create organization
 	Org = &dao.Organization{
 		Name:            "huawei",
@@ -54,6 +78,22 @@ func Test_teamInit(t *testing.T) {
 		OrgName:  Org.Name,
 	}
 	AddUserToOrganizationTest(t, oumJSON, User1.Name, User1.Password)
+
+	//add teamAdmin to organization
+	oumJSON1 := &controller.OrganizationUserMapJSON{
+		UserName: tAdmin.Name,
+		Role:     dao.ORGMEMBER,
+		OrgName:  Org.Name,
+	}
+	AddUserToOrganizationTest(t, oumJSON1, User1.Name, User1.Password)
+
+	//add teamMember to organization
+	oumJSON2 := &controller.OrganizationUserMapJSON{
+		UserName: tMember.Name,
+		Role:     dao.ORGMEMBER,
+		OrgName:  Org.Name,
+	}
+	AddUserToOrganizationTest(t, oumJSON2, User1.Name, User1.Password)
 }
 
 func CreateTeamTest(t *testing.T, teamJSON *controller.TeamJSON, username, password string) (int, error) {
@@ -87,7 +127,7 @@ func Test_NonOrgMemberCreateTeam(t *testing.T) {
 	signUp(User3, t)
 
 	teamJSON := &controller.TeamJSON{
-		TeamName: "HDTeam",
+		TeamName: "hd_team",
 		Comment:  "create team",
 		OrgName:  Org.Name,
 	}
@@ -114,7 +154,7 @@ func Test_NonExsitedUserCreateTeam(t *testing.T) {
 	}
 
 	teamJSON := &controller.TeamJSON{
-		TeamName: "HWTeam",
+		TeamName: "hw_team",
 		Comment:  "create team",
 		OrgName:  Org.Name,
 	}
@@ -133,7 +173,7 @@ func Test_NonExsitedUserCreateTeam(t *testing.T) {
 func Test_orgMemberCreateTeam(t *testing.T) {
 
 	teamJSON := &controller.TeamJSON{
-		TeamName: "HWTeam",
+		TeamName: "hw_team",
 		Comment:  "create team",
 		OrgName:  Org.Name,
 	}
@@ -152,7 +192,7 @@ func Test_orgMemberCreateTeam(t *testing.T) {
 func Test_orgAdminCreateTeam(t *testing.T) {
 
 	teamJSON := &controller.TeamJSON{
-		TeamName: "HWTeam",
+		TeamName: "hw_team",
 		Comment:  "create team",
 		OrgName:  Org.Name,
 	}
@@ -185,7 +225,7 @@ func Test_orgAdminCreateTeam(t *testing.T) {
 func Test_orgAdminCreateSameTeam(t *testing.T) {
 
 	teamJSON := &controller.TeamJSON{
-		TeamName: "HWTeam",
+		TeamName: "hw_team",
 		Comment:  "create team",
 		OrgName:  Org.Name,
 	}
@@ -214,6 +254,160 @@ func Test_orgAdminCreateSameTeam(t *testing.T) {
 	}
 }
 
+//Update
+func Test_UpateteamInit(t *testing.T) {
+
+	//teamAdmin add to team
+	tumJSON := &controller.TeamUserMapJSON{
+		TeamName: "hw_team",
+		OrgName:  Org.Name,
+		UserName: tAdmin.Name,
+		Role:     dao.TEAMADMIN,
+	}
+	AddUserToTeam(t, tumJSON, OrgAdmin.Name, OrgAdmin.Password)
+
+	//teamMember add to team
+	tumJSON1 := &controller.TeamUserMapJSON{
+		TeamName: "hw_team",
+		OrgName:  Org.Name,
+		UserName: tMember.Name,
+		Role:     dao.TEAMMEMBER,
+	}
+	AddUserToTeam(t, tumJSON1, OrgAdmin.Name, OrgAdmin.Password)
+}
+
+func UpdateTeamTest(t *testing.T, teamJSON *controller.TeamJSON, username, password string) (int, error) {
+	body, _ := json.Marshal(teamJSON)
+	req, err := http.NewRequest("PUT", setting.ListenMode+"://"+Domains+"/uam/team/update", bytes.NewBuffer(body))
+	if err != nil {
+		return -1, err
+	}
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	req.SetBasicAuth(username, password)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return -1, err
+	}
+	return resp.StatusCode, nil
+}
+
+//orgadmin update Team
+func Test_orgAdminUpdateTeam(t *testing.T) {
+
+	teamJSON := &controller.TeamJSON{
+		TeamName: "hw_team",
+		Comment:  "orgadmin update team",
+		OrgName:  Org.Name,
+	}
+
+	statusCode, err := UpdateTeamTest(t, teamJSON, User1.Name, User1.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode != 200 {
+		t.Fatal("Update team Failed.")
+	}
+
+	// query Team
+	team1 := &dao.Team{
+		Name: teamJSON.TeamName,
+		Org:  &dao.Organization{Name: teamJSON.OrgName}}
+	if exist, err := team1.Get(); err != nil {
+		t.Error(err)
+	} else if !exist {
+		t.Error("team is not exitst")
+	} else {
+		if team1.Name != teamJSON.TeamName || team1.Org.Name != teamJSON.OrgName ||
+			team1.Comment != teamJSON.Comment {
+			t.Error("team1's save is not same with get")
+		}
+	}
+}
+
+//sysAdmin update Team
+func Test_sysAdminUpdateTeam(t *testing.T) {
+
+	sysAdmin = &dao.User{
+		Name:     "root",
+		Password: "root",
+	}
+
+	teamJSON := &controller.TeamJSON{
+		TeamName: "hw_team",
+		Comment:  "sysAdmin update team",
+		OrgName:  Org.Name,
+	}
+
+	statusCode, err := UpdateTeamTest(t, teamJSON, sysAdmin.Name, sysAdmin.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode != 200 {
+		t.Fatal("Update team Failed.")
+	}
+}
+
+//teamAdmin update Team
+func Test_teamAdminUpdateTeam(t *testing.T) {
+
+	teamJSON := &controller.TeamJSON{
+		TeamName: "hw_team",
+		Comment:  "teamAdmin update team",
+		OrgName:  Org.Name,
+	}
+
+	statusCode, err := UpdateTeamTest(t, teamJSON, tAdmin.Name, tAdmin.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode != 200 {
+		t.Fatal("Update team Failed.")
+	}
+}
+
+//orgMember update Team
+func Test_orgMemberUpdateTeam(t *testing.T) {
+
+	teamJSON := &controller.TeamJSON{
+		TeamName: "hw_team",
+		Comment:  "orgMember update team",
+		OrgName:  Org.Name,
+	}
+
+	statusCode, err := UpdateTeamTest(t, teamJSON, User2.Name, User2.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode == 200 {
+		t.Fatal("Update team error.")
+	}
+}
+
+//teamMember update Team
+func Test_teamMemberUpdateTeam(t *testing.T) {
+
+	teamJSON := &controller.TeamJSON{
+		TeamName: "hw_team",
+		Comment:  "teamMember update team",
+		OrgName:  Org.Name,
+	}
+
+	statusCode, err := UpdateTeamTest(t, teamJSON, tMember.Name, tMember.Password)
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(statusCode)
+	if statusCode == 200 {
+		t.Fatal("Update team error.")
+	}
+}
+
+// Delete
 func DeleteTeamTest(t *testing.T, OrgName, team, userName, password string) (int, error) {
 
 	req, err := http.NewRequest("DELETE", setting.ListenMode+"://"+Domains+"/uam/team/"+OrgName+"/"+team, nil)
@@ -242,7 +436,7 @@ func Test_NonExsieduserDeleteTeam(t *testing.T) {
 		Role:     dao.SYSMEMBER,
 	}
 
-	statusCode, err := DeleteTeamTest(t, Org.Name, "HWTeam", User4.Name, User4.Password)
+	statusCode, err := DeleteTeamTest(t, Org.Name, "hw_team", User4.Name, User4.Password)
 	if err != nil {
 		t.Error(err)
 	}
@@ -255,7 +449,7 @@ func Test_NonExsieduserDeleteTeam(t *testing.T) {
 //orgMember delete Team
 func Test_orgMemberDeleteTeam(t *testing.T) {
 
-	statusCode, err := DeleteTeamTest(t, Org.Name, "HWTeam", User2.Name, User2.Password)
+	statusCode, err := DeleteTeamTest(t, Org.Name, "hw_team", User2.Name, User2.Password)
 	if err != nil {
 		t.Error(err)
 	}
@@ -268,7 +462,7 @@ func Test_orgMemberDeleteTeam(t *testing.T) {
 //orgadmin delete Team
 func Test_orgAdminDeleteTeam(t *testing.T) {
 
-	statusCode, err := DeleteTeamTest(t, Org.Name, "HWTeam", User1.Name, User1.Password)
+	statusCode, err := DeleteTeamTest(t, Org.Name, "hw_team", User1.Name, User1.Password)
 	if err != nil {
 		t.Error(err)
 	}
@@ -290,6 +484,12 @@ func Test_TeamTestClear(t *testing.T) {
 	}
 	User3 := &dao.User{Name: "user3"}
 	if err := User3.Delete(); err != nil {
+		t.Error(err)
+	}
+	if err := tAdmin.Delete(); err != nil {
+		t.Error(err)
+	}
+	if err := tMember.Delete(); err != nil {
 		t.Error(err)
 	}
 }

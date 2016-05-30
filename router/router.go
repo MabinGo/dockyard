@@ -105,30 +105,50 @@ func SetRouters(m *macaron.Macaron) {
 		m.Group("/user", func() {
 			m.Post("/signup", controller.SignUp)
 			m.Get("/signin", controller.SignIn)
+			m.Put("/update", controller.UpdateUser)
 		})
 
 		//repository
 		m.Group("/repository", func() {
 			m.Post("/", controller.CreateRepository)
 			m.Delete("/:namespace/:repository", controller.DeleteRepository)
+			m.Delete("/deactive/:namespace/:repository", controller.DeactiveRepository)
+			m.Put("/update", controller.UpdateRepository)
+			m.Get("/:namespace/list", controller.GetRepositoryList)
+			m.Get("/:repository/fuzzylist", controller.GetFuzzyRepositoryList)
 		})
 
 		//organization
 		m.Group("/organization", func() {
 			m.Post("/", controller.CreateOrganization)
 			m.Delete("/:organization", controller.DeleteOrganization)
+			m.Delete("/deactive/:organization", controller.DeactiveOrganization)
 			m.Post("/adduser/", controller.AddUserToOrganization)
 			m.Delete("/removeuser/:organization/:user", controller.RemoveUserFromOrganization)
+			m.Delete("/deactiveuser/:organization/:user", controller.DeactiveUserFromOrganization)
+			m.Put("/update", controller.UpdateOrganization)
+			m.Put("/updateorganizationusermap", controller.UpdateOrganizationUserMap)
+			m.Get("/list", controller.GetOrganizationList)
+			m.Get("/:organization/listuser", controller.GetUserListFromOrganization)
 		})
 
 		//team
 		m.Group("/team", func() {
 			m.Post("/", controller.CreateTeam)
 			m.Delete("/:organization/:team", controller.DeleteTeam)
+			m.Delete("/deactive/:organization/:team", controller.DeactiveTeam)
 			m.Post("/adduser/", controller.AddUserToTeam)
 			m.Delete("/removeuser/:organization/:team/:user", controller.RemoveUserFromTeam)
+			m.Delete("/deactiveuser/:organization/:team/:user", controller.DeactiveUserFromTeam)
 			m.Post("/addrepository/", controller.AddRepositoryToTeam)
 			m.Delete("/removerepository/:organization/:team/:repository", controller.RemoveRepositoryFromTeam)
+			m.Delete("/deactiverepository/:organization/:team/:repository", controller.DeactiveRepositoryFromTeam)
+			m.Put("/update", controller.UpdateTeam)
+			m.Put("/updateteamusermap", controller.UpdateTeamUserMap)
+			m.Put("/updateteamrepositorymap", controller.UpdateTeamRepositoryMap)
+			m.Get("/:organization/listteam", controller.GetTeamListFromOrganization)
+			m.Get("/:organization/:team/listuser", controller.GetUserListFromTeam)
+			m.Get("/:organization/:team/listrepository", controller.GetRepositoryListFromTeam)
 		})
 	})
 
