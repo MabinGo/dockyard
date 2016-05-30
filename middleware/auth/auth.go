@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/astaxie/beego/logs"
@@ -209,7 +210,11 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 }
 
 func drcVerifyHandler(author string) error {
-	rawurl := fmt.Sprintf("%s://%s/uam/user/signin", setting.ListenMode, setting.Domains)
+	url, err := url.Parse(setting.Realm)
+	if err != nil {
+		return err
+	}
+	rawurl := fmt.Sprintf("%s://%s/uam/user/signin", url.Scheme, url.Host)
 	resp, err := module.SendHttpRequest("GET", rawurl, nil, author)
 	if err != nil {
 		return err
