@@ -1,6 +1,8 @@
 package synch
 
 import (
+	"fmt"
+
 	"github.com/containerops/dockyard/models"
 	"github.com/containerops/dockyard/utils/db"
 )
@@ -86,4 +88,14 @@ func (rg *Region) Save(namespace, repository, tag string) error {
 	}
 
 	return err
+}
+
+func (rg *Region) Delete(namespace, repository, tag string) error {
+	if exists, err := rg.Get(namespace, repository, tag); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("not found region")
+	} else {
+		return db.Drv.Delete(rg)
+	}
 }

@@ -133,7 +133,7 @@ func SaveSynContent(namespace, repository, tag, count string, reqbody []byte) er
 
 	//cover repo
 	r := new(models.Repository)
-	existed, err := r.Get(namespace, repository)
+	exists, err := r.Get(namespace, repository)
 	if err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func SaveSynContent(namespace, repository, tag, count string, reqbody []byte) er
 	r.Size = sc.Repository.Size
 	r.Version = sc.Repository.Version
 	r.JSON = sc.Repository.JSON
-	if !existed {
+	if !exists {
 		r.Tagslist = r.SaveTagslist([]string{tag})
 		r.Download = 0
 	} else {
@@ -186,7 +186,7 @@ func SaveSynContent(namespace, repository, tag, count string, reqbody []byte) er
 	var tarsumlist = []string{}
 	for _, synimg := range sc.Images {
 		i := new(models.Image)
-		existed, err := i.Get(synimg.ImageId)
+		exists, err := i.Get(synimg.ImageId)
 		if err != nil {
 			return err
 		}
@@ -201,7 +201,7 @@ func SaveSynContent(namespace, repository, tag, count string, reqbody []byte) er
 		i.Path = module.GetLayerPath(synimg.ImageId, "layer", setting.APIVERSION_V2)
 		i.Size = synimg.Size
 		i.Version = synimg.Version
-		if !existed {
+		if !exists {
 			i.Count = 0
 		}
 
@@ -232,17 +232,17 @@ func SaveSynContent(namespace, repository, tag, count string, reqbody []byte) er
 
 func FillSynContent(namespace, repository, tag string, sc *Syncont) error {
 	r := new(models.Repository)
-	if existed, err := r.Get(namespace, repository); err != nil {
+	if exists, err := r.Get(namespace, repository); err != nil {
 		return err
-	} else if !existed {
+	} else if !exists {
 		return fmt.Errorf("not found repository %s/%s", namespace, repository)
 	}
 	sc.Repository = *r
 
 	t := new(models.Tag)
-	if existed, err := t.Get(namespace, repository, tag); err != nil {
+	if exists, err := t.Get(namespace, repository, tag); err != nil {
 		return err
-	} else if !existed {
+	} else if !exists {
 		return fmt.Errorf("not found tag %s/%s:%s", namespace, repository, tag)
 	}
 	sc.Tag = *t
@@ -280,9 +280,9 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 	}
 
 	regionIn := new(Region)
-	if existed, err := regionIn.Get(namespace, repository, tag); err != nil {
+	if exists, err := regionIn.Get(namespace, repository, tag); err != nil {
 		return err
-	} else if !existed {
+	} else if !exists {
 		//for k, _ := range eplist.Endpoints {
 		//	eplist.Endpoints[k].Active = true
 		//}
@@ -445,64 +445,128 @@ func GetSynRegionEndpoint(namespace, repository, tag string) (string, error) {
 	return r.Endpointlist, nil
 }
 
-func DelSynRegion(namespace, repository, tag string, reqbody []byte) error {
+func DelSynRegion(namespace, repository, tag string, reqbody []byte) (bool, error) {
 	eplistIn := new(Endpointlist)
 	if err := json.Unmarshal(reqbody, eplistIn); err != nil {
-		return err
+		return false, err
 	}
 
 	r := new(Region)
-	if existed, err := r.Get(namespace, repository, tag); err != nil {
-		return err
-	} else if !existed {
-		return fmt.Errorf("not found region")
+	if exists, err := r.Get(namespace, repository, tag); err != nil {
+		return false, err
+	} else if !exists {
+		return false, fmt.Errorf("not found region")
 	}
 
 	if len(r.Endpointlist) <= 0 {
-		return fmt.Errorf("endpoint list invalid")
+		return false, fmt.Errorf("endpoint list is null")
 	}
 
 	eplist := new(Endpointlist)
 	if err := json.Unmarshal([]byte(r.Endpointlist), eplist); err != nil {
-		return err
+		return false, err
+	}
+
+	orilen := len(eplist.Endpoints)
+	for _, epIn := range eplistIn.Endpoints {
+		for k, v := range eplist.Endpoints {
+			if epIn.URL == v.URL {
+				eplist.Endpoints[k].URL = ""
+				continue
+			}
+		}
 	}
 
 	eplistNew := new(Endpointlist)
-
 	for _, ep := range eplist.Endpoints {
-		//exists := false
-		for k, v := range eplistIn.Endpoints {
-			if ep.URL != v.URL {
-				exists = true
-				eplist.Endpoints[k] = epin
-				break
-			}
-
-			if epin.URL == v.URL {
-				exists = true
-				eplist.Endpoints[k] = epin
-				break
-			}
+		if ep.URL == "" {
+			continue
 		}
-
-		if !exists {
-			eplist.Endpoints = append(eplist.Endpoints, epin)
-		}
+		eplistNew.Endpoints = append(eplistNew.Endpoints, ep)
 	}
 
-	result, _ := json.Marshal(eplist)
+	newlen := len(eplistNew.Endpoints)
+	if newlen == 0 {
+		return true, r.Delete(namespace, repository, tag)
+	}
+
+	if newlen == orilen {
+		return false, nil
+	}
+
+	result, _ := json.Marshal(eplistNew)
 	r.Endpointlist = string(result)
 
 	if err := r.Save(namespace, repository, tag); err != nil {
-		return err
+		return false, err
 	}
 
 	//TODO: mutex
 	if setting.SynMode != "" {
 		if err := UpdateRegionList(r); err != nil {
-			return err
+			return false, err
 		}
 	}
 
-	return nil
+	return true, nil
+}
+
+func DelSynDRC(reqbody []byte) (bool, error) {
+	eplistIn := new(Endpointlist)
+	if err := json.Unmarshal(reqbody, eplistIn); err != nil {
+		return false, err
+	}
+
+	rt := new(RegionTable)
+	if exists, err := rt.Get(RTName); err != nil {
+		return false, err
+	} else if !exists {
+		return false, fmt.Errorf("not found region table")
+	}
+
+	if len(rt.DRClist) <= 0 {
+		return false, fmt.Errorf("DRC list is null")
+	}
+
+	eplist := new(Endpointlist)
+	if err := json.Unmarshal([]byte(rt.DRClist), eplist); err != nil {
+		return false, err
+	}
+
+	orilen := len(eplist.Endpoints)
+	for _, epIn := range eplistIn.Endpoints {
+		for k, v := range eplist.Endpoints {
+			if epIn.URL == v.URL {
+				eplist.Endpoints[k].URL = ""
+				continue
+			}
+		}
+	}
+
+	eplistNew := new(Endpointlist)
+	for _, ep := range eplist.Endpoints {
+		if ep.URL == "" {
+			continue
+		}
+		eplistNew.Endpoints = append(eplistNew.Endpoints, ep)
+	}
+
+	newlen := len(eplistNew.Endpoints)
+	if newlen == 0 {
+		rt.DRClist = ""
+		return true, rt.Save(RTName)
+	}
+
+	if newlen == orilen {
+		return false, nil
+	}
+
+	result, _ := json.Marshal(eplistNew)
+	rt.DRClist = string(result)
+
+	if err := rt.Save(RTName); err != nil {
+		return false, err
+	}
+
+	return true, nil
 }

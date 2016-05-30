@@ -134,12 +134,13 @@ func SetRouters(m *macaron.Macaron) {
 
 	//images synchron distributed
 	m.Group("/syn", func() {
-		m.Post("/adddrc", synch.PostSynDRCHandler) //TODO: need authorization
 		m.Post("/:namespace/:repository/:tag/region", synch.PostSynRegionHandler)
 		m.Post("/:namespace/:repository/:tag/trigger", synch.PostSynTrigHandler)
 		m.Put("/:namespace/:repository/:tag/content", synch.PutSynContentHandler)
-		m.Get("/adddrc", synch.GetSynDRCHandler)
-		m.Get("/:namespace/:repository/:tag", synch.GetSynRegionHandler)
+		m.Get("/:namespace/:repository/:tag/region", synch.GetSynRegionHandler)
 		m.Delete("/:namespace/:repository/:tag/region", synch.DelSynRegionHandler)
+		m.Post("/drc", synch.PostSynDRCHandler) //TODO: need authorization
+		m.Get("/drc", synch.GetSynDRCHandler)
+		m.Delete("/drc", synch.DelSynDRCHandler)
 	})
 }
