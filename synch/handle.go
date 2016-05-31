@@ -99,11 +99,9 @@ func PutSynContentHandler(ctx *macaron.Context) (int, []byte) {
 	namespace := ctx.Params(":namespace")
 	repository := ctx.Params(":repository")
 	tag := ctx.Params(":tag")
-	//times := ctx.Query("times")
-	count := ctx.Query("count")
 
 	body, _ := ctx.Req.Body().Bytes()
-	if err := SaveSynContent(namespace, repository, tag, count, body); err != nil {
+	if err := SaveSynContent(namespace, repository, tag, body); err != nil {
 		synlog.Error("[REGISTRY API] Failed to save syn content: %s", err.Error())
 
 		result, _ = json.Marshal(map[string]string{"message": "Failed to synchron"})
@@ -125,9 +123,9 @@ func GetSynDRCHandler(ctx *macaron.Context) (int, []byte) {
 		result, _ = json.Marshal(map[string]string{"message": "Failed to get DRC list"})
 		return http.StatusInternalServerError, result
 	} else if drclist == "" {
-		synlog.Error("[REGISTRY API] Failed to get DRC list: no endpoint")
+		synlog.Error("[REGISTRY API] Failed to get DRC list: No endpoint in the DRC region")
 
-		result, _ = json.Marshal(map[string]string{"message": "No endpoint"})
+		result, _ = json.Marshal(map[string]string{"message": "No endpoint in the DRC region"})
 		return http.StatusNotFound, result
 	}
 
@@ -147,6 +145,11 @@ func GetSynRegionHandler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ = json.Marshal(map[string]string{"message": "Failed to get region info"})
 		return http.StatusInternalServerError, result
+	} else if eplist == "" {
+		synlog.Error("[REGISTRY API] No endpoint in the region")
+
+		result, _ = json.Marshal(map[string]string{"message": "No endpoint in the region"})
+		return http.StatusNotFound, result
 	}
 
 	return http.StatusOK, []byte(eplist)

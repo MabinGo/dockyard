@@ -37,6 +37,7 @@ type Endpoint struct {
 	Name   string `json:"name"`
 	URL    string `json:"url"`
 	Active bool   `json:"active"`
+	Status string `json:"status"`
 }
 
 type Syncont struct {

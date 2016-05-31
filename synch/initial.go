@@ -23,6 +23,7 @@ func InitSynchron() error {
 		}
 	}
 
+	//use synch log itself
 	synlog = logs.NewLogger(4096)
 	synlog.SetLogger("console", "")
 	synlog.SetLogger("file", fmt.Sprintf("{\"filename\":\"%s\"}", setting.LogPath))

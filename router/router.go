@@ -159,7 +159,7 @@ func SetRouters(m *macaron.Macaron) {
 		m.Put("/:namespace/:repository/:tag/content", synch.PutSynContentHandler)
 		m.Get("/:namespace/:repository/:tag/region", synch.GetSynRegionHandler)
 		m.Delete("/:namespace/:repository/:tag/region", synch.DelSynRegionHandler)
-		m.Post("/drc", synch.PostSynDRCHandler) //TODO: need authorization
+		m.Post("/drc", synch.PostSynDRCHandler)
 		m.Get("/drc", synch.GetSynDRCHandler)
 		m.Delete("/drc", synch.DelSynDRCHandler)
 	})

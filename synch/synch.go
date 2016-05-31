@@ -14,7 +14,12 @@ import (
 	"github.com/containerops/dockyard/utils/setting"
 )
 
-var RTName string = "RegionTable"
+var (
+	RTName  string = "RegionTable"
+	SUCCESS string = "Success"
+	FAILURE string = "Failure"
+	ORIGION string = "Origin"
+)
 
 func TrigSynDRC(namespace, repository, tag, auth string) error {
 	rt := new(RegionTable)
@@ -30,16 +35,24 @@ func TrigSynDRC(namespace, repository, tag, auth string) error {
 			return err
 		}
 
-		for _, v := range eplist.Endpoints {
+		for k, v := range eplist.Endpoints {
 			if v.Active == false {
 				continue
 			}
 
 			if err := trig(namespace, repository, tag, auth, v.URL); err != nil {
-				synlog.Error("\nFailed to synchronize %s/%s:%s to DR %s, error: %v", namespace, repository, tag, v.URL, err)
+				synlog.Error("Failed to synchronize %s/%s:%s to DR %s, error: %v", namespace, repository, tag, v.URL, err)
+				eplist.Endpoints[k].Status = FAILURE
 			} else {
-				synlog.Trace("\nSuccessed to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
+				synlog.Trace("Successed to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
+				eplist.Endpoints[k].Status = SUCCESS
 			}
+		}
+
+		result, _ := json.Marshal(eplist)
+		rt.DRClist = string(result)
+		if err := rt.Save(RTName); err != nil {
+			return err
 		}
 	}
 
@@ -61,18 +74,26 @@ func TrigSynEndpoint(region *Region, auth string) error {
 		}
 		//TODO: opt to use goroutine
 		if err := trig(region.Namespace, region.Repository, region.Tag, auth, eplist.Endpoints[k].URL); err != nil {
-			synlog.Error("\nFailed to synchronize %s/%s:%s to %s, error: %v",
-				region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL, err)
-			errs = append(errs, fmt.Sprintf("\nsynchronize to %s error: %s", eplist.Endpoints[k].URL, err.Error()))
+			//synlog.Error("Failed to synchronize %s/%s:%s to %s, error: %v",
+			//	region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL, err)
+			errs = append(errs, fmt.Sprintf("synchronize to %s error: %s", eplist.Endpoints[k].URL, err.Error()))
+			eplist.Endpoints[k].Status = FAILURE
 			continue
 		} else {
-			synlog.Trace("\nSuccessed to synchronize %s/%s:%s to %s",
-				region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL)
+			//synlog.Trace("Successed to synchronize %s/%s:%s to %s",
+			//	region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL)
+			eplist.Endpoints[k].Status = SUCCESS
 		}
 	}
 
 	if activecnt == len(eplist.Endpoints) {
-		synlog.Trace("\nno active region")
+		synlog.Trace("no active region")
+	}
+
+	result, _ := json.Marshal(eplist)
+	region.Endpointlist = string(result)
+	if err := region.Save(region.Namespace, region.Repository, region.Tag); err != nil {
+		return err
 	}
 	/*
 		if len(eplist.Endpoints) == len(errs) {
@@ -99,32 +120,19 @@ func trig(namespace, repository, tag, auth, dest string) error {
 		return err
 	}
 	url := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
-
-	var times = 10
-	var ret error
-	for i := times; i > 0; i-- {
-		rawurl := fmt.Sprintf("%s?times=%v&count=%v", url, times, i)
-		if resp, err := module.SendHttpRequest("PUT", rawurl, bytes.NewReader(body), auth); err != nil {
-			//synlog.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
-			ret = err
-			break
-		} else if resp.StatusCode != http.StatusOK { //http.StatusInternalServerError
-			ret = fmt.Errorf("response code %v", resp.StatusCode)
-			//synlog.Error("\nFailed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
-			continue
-		} else {
-			//TODO: must announce success to user
-			//synlog.Trace("\nSuccess synchronize %s/%s:%s to %s", namespace, repository, tag, dest)
-			ret = nil
-			break
-		}
+	if resp, err := module.SendHttpRequest("PUT", url, bytes.NewReader(body), auth); err != nil {
+		//synlog.Error("Failed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
+		return err
+	} else if resp.StatusCode != http.StatusOK { //http.StatusInternalServerError
+		return fmt.Errorf("response code %v", resp.StatusCode)
+		//synlog.Error("Failed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
 	}
 
-	return ret
+	return nil
 }
 
 //TODO: must consider parallel, push/pull during synchron
-func SaveSynContent(namespace, repository, tag, count string, reqbody []byte) error {
+func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
 	sc := new(Syncont)
 	sc.Layers = make(map[string][]byte)
 	if err := json.Unmarshal(reqbody, sc); err != nil {
@@ -235,7 +243,7 @@ func FillSynContent(namespace, repository, tag string, sc *Syncont) error {
 	if exists, err := r.Get(namespace, repository); err != nil {
 		return err
 	} else if !exists {
-		return fmt.Errorf("not found repository %s/%s", namespace, repository)
+		return fmt.Errorf("not found repository %s/%s:%s", namespace, repository, tag)
 	}
 	sc.Repository = *r
 
@@ -283,9 +291,9 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 	if exists, err := regionIn.Get(namespace, repository, tag); err != nil {
 		return err
 	} else if !exists {
-		//for k, _ := range eplist.Endpoints {
-		//	eplist.Endpoints[k].Active = true
-		//}
+		for k, _ := range eplist.Endpoints {
+			eplist.Endpoints[k].Status = ORIGION
+		}
 		result, _ := json.Marshal(eplist)
 		regionIn.Namespace, regionIn.Repository, regionIn.Tag, regionIn.Endpointlist =
 			namespace, repository, tag, string(result)
@@ -301,13 +309,13 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 				if epin.URL == v.URL {
 					exists = true
 					eporig.Endpoints[k] = epin
-					//eporig.Endpoints[k].Active = true
+					eporig.Endpoints[k].Status = ORIGION
 					break
 				}
 			}
 
 			if !exists {
-				//epin.Active = true
+				epin.Status = ORIGION
 				eporig.Endpoints = append(eporig.Endpoints, epin)
 			}
 		}
@@ -355,21 +363,21 @@ func SaveDRCContent(reqbody []byte) error {
 				if epin.URL == v.URL {
 					exists = true
 					eplistOri.Endpoints[k] = epin
-					//eplistOri.Endpoints[k].Active = true
+					eplistOri.Endpoints[k].Status = ORIGION
 					break
 				}
 			}
 
 			if !exists {
-				//epin.Active = true
+				epin.Status = ORIGION
 				eplistOri.Endpoints = append(eplistOri.Endpoints, epin)
 			}
 		}
 	} else {
 		eplistOri = eplistIn
-		//for k, _ := range eplistOri.Endpoints {
-		//	eplistOri.Endpoints[k].Active = true
-		//}
+		for k, _ := range eplistOri.Endpoints {
+			eplistOri.Endpoints[k].Status = ORIGION
+		}
 	}
 
 	result, _ := json.Marshal(eplistOri)
@@ -439,7 +447,7 @@ func GetSynRegionEndpoint(namespace, repository, tag string) (string, error) {
 	if exists, err := r.Get(namespace, repository, tag); err != nil {
 		return "", err
 	} else if !exists {
-		return "", fmt.Errorf("not found")
+		return "", nil
 	}
 
 	return r.Endpointlist, nil

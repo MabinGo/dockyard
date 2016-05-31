@@ -73,8 +73,11 @@ func (a *authorization) Handler(ctx *macaron.Context) {
 
 	//exception handler,request by command,just like get _catalog, delete mainifest or blob
 	if ignorecmd, err := cmdReqHandler(ctx); err != nil {
-		Log.Error("Authorized err: %v", err.Error())
+		ret := fmt.Sprintf("Authorized err: %v", err.Error())
+		Log.Error(ret)
+
 		ctx.Resp.WriteHeader(http.StatusUnauthorized)
+		ctx.Resp.Write([]byte(ret))
 		return
 	} else if !ignorecmd {
 		Log.Info("Authorized successfully")
