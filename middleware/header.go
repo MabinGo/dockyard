@@ -5,6 +5,7 @@ import (
 
 	"gopkg.in/macaron.v1"
 
+	"github.com/containerops/dockyard/module"
 	"github.com/containerops/dockyard/utils/setting"
 )
 
@@ -15,7 +16,7 @@ func setRespHeaders() macaron.Handler {
 			ctx.Resp.Header().Set("X-Docker-Registry-Standalone", setting.Standalone)
 			ctx.Resp.Header().Set("X-Docker-Registry-Version", setting.RegistryVersion)
 			ctx.Resp.Header().Set("X-Docker-Registry-Config", setting.RunMode)
-			ctx.Resp.Header().Set("X-Docker-Endpoints", setting.Domains)
+			ctx.Resp.Header().Set("X-Docker-Endpoints", module.NewURLFromRequest(ctx.Req.Request).Host)
 		} else if flag := strings.Contains(ctx.Req.RequestURI, "/v2/"); flag == true {
 			//ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			//ctx.Resp.Header().Set("WWW-Authenticate", fmt.Sprintf("Basic realm=\"%v\"", setting.Domains))

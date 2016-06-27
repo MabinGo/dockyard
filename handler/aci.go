@@ -107,6 +107,7 @@ func PostUploadHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 
 	acifile := ctx.Params(":acifile")
 	signfile := fmt.Sprintf("%v%v", acifile, ".asc")
+	u := module.NewURLFromRequest(ctx.Req.Request)
 
 	//TODO: only for testing,pubkey will be read and saved via user management module
 	pubkeyspath := module.GetPubkeysPath(namespace, repository, setting.APIVERSION_ACI)
@@ -128,7 +129,7 @@ func PostUploadHandler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 		return http.StatusInternalServerError, result
 	}
 
-	prefix := fmt.Sprintf("%v://%v/ac/push/%v/%v/", setting.ListenMode, setting.Domains, namespace, repository)
+	prefix := fmt.Sprintf("%v://%v/ac/push/%v/%v/", u.Scheme, u.Host, namespace, repository)
 	endpoint := models.UploadDetails{
 		ACIPushVersion: "0.0.1", //TODO: follow ACI push spec
 		Multipart:      false,

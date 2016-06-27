@@ -1,9 +1,12 @@
 package setting
 
 import (
+	"encoding/base64"
 	"fmt"
 
 	"github.com/astaxie/beego/config"
+
+	"github.com/containerops/dockyard/utils/aes"
 )
 
 const (
@@ -253,7 +256,21 @@ func setDBConfig(conf config.Configer) error {
 		DBUser = dbuser
 	}
 	if dbpass := conf.String("db::passwd"); dbpass != "" {
-		DBPasswd = dbpass
+		var (
+			cipher []byte
+			pwd    []byte
+			err    error
+		)
+		cipher, err = base64.StdEncoding.DecodeString(dbpass)
+		if err != nil {
+			return fmt.Errorf("Decode db::passwd error:%s\n", err.Error())
+		}
+		pwd, err = aes.Decrypt(cipher, aes.AESKey)
+		if err != nil {
+			return fmt.Errorf("Decrypt db::passwd error:%s\n", err.Error())
+		}
+
+		DBPasswd = string(pwd)
 	}
 	if dbname := conf.String("db::name"); dbname != "" {
 		DBName = dbname
@@ -530,7 +547,15 @@ func setAuthServerConfig(conf config.Configer) error {
 		}
 
 		if bindPassword := conf.String("authn_ldap::bindpassword"); bindPassword != "" {
-			BindPassword = bindPassword
+			if c, e := base64.StdEncoding.DecodeString(bindPassword); e != nil {
+				err = fmt.Errorf("authn_ldap Decode BindPassword error:%s\n", e.Error())
+			} else {
+				if pwd, e := aes.Decrypt(c, aes.AESKey); e != nil {
+					err = fmt.Errorf("authn_ldap Decrypt BindPassword error:%s\n", e.Error())
+				} else {
+					BindPassword = string(pwd)
+				}
+			}
 		} else {
 			err = fmt.Errorf("authn_ldap bindpassword config value error")
 		}

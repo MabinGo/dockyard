@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/astaxie/beego/logs"
+	"github.com/docker/distribution/manifest/schema2"
 	"gopkg.in/macaron.v1"
 
 	"github.com/containerops/dockyard/models"
@@ -27,6 +28,7 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
+	u := module.NewURLFromRequest(ctx.Req.Request)
 
 	var name string
 	if namespace == "" {
@@ -81,9 +83,34 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		return http.StatusBadRequest, result
 	}
 
+	V2Conversion := []byte{}
+	for k, v := range V2ConversionMap {
+		if k == namespace+"/"+repository {
+			V2Conversion = v
+		}
+	}
+	if err := module.SaveV2Conversion(namespace, repository, tag, string(V2Conversion)); err != nil {
+		log.Error("[REGISTRY API V2] Failed to save v2conversion: " + err.Error())
+
+		detail := map[string]string{"Name": name, "Tag": tag}
+		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
+		return http.StatusInternalServerError, result
+	}
+	if exist, err := t.Get(namespace, repository, tag); err != nil {
+		log.Error("[REGISTRY API V2] Failed to get manifest: " + err.Error())
+
+		detail := map[string]string{"Name": name, "Tag": tag}
+		result, _ := module.ReportError(module.UNKNOWN, detail)
+		return http.StatusBadRequest, result
+	} else if exist {
+		if t.Schema == 2 {
+			delete(V2ConversionMap, namespace+"/"+repository)
+		}
+	}
+
 	random := fmt.Sprintf("%s://%s/v2/%s/manifests/%s",
-		setting.ListenMode,
-		setting.Domains,
+		u.Scheme,
+		u.Host,
 		name,
 		digest)
 
@@ -170,6 +197,7 @@ func GetTagsListV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
+	acceptHeaders := ctx.Req.Header.Get("Accept")
 
 	var name string
 	if namespace == "" {
@@ -205,12 +233,31 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		return http.StatusInternalServerError, result
 	}
 
+	manifest := t.Manifest
+	supportsSchema2 := false
+	for _, mediaType := range acceptHeaders {
+		if string(mediaType) == schema2.MediaTypeManifest {
+			supportsSchema2 = true
+		}
+	}
+	if !supportsSchema2 && t.Schema == 2 {
+		mnf, err := module.ConvertSchema2Manifest(t)
+		if err != nil {
+			log.Error("[REGISTRY API V2] Failed to conver schema2 manifest: " + err.Error())
+
+			detail := map[string]string{"Name": name, "Tag": tag}
+			result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
+			return http.StatusInternalServerError, result
+		}
+		manifest = mnf
+	}
+
 	contenttype := []string{"", "application/json; charset=utf-8", "application/vnd.docker.distribution.manifest.v2+json"}
 	ctx.Resp.Header().Set("Content-Type", contenttype[t.Schema])
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
-	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(len(t.Manifest)))
+	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(len(manifest)))
 
-	return http.StatusOK, []byte(t.Manifest)
+	return http.StatusOK, []byte(manifest)
 }
 
 func DeleteManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {

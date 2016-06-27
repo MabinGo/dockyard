@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/containerops/dockyard/utils/setting"
 )
@@ -84,4 +85,41 @@ func SendHttpRequest(methord, rawurl string, body io.Reader, auth string) (*http
 	}
 
 	return resp, nil
+}
+
+// NewURLFromRequest uses information from an *http.Request to
+// construct the url.
+func NewURLFromRequest(r *http.Request) *url.URL {
+	var scheme string
+
+	forwardedProto := r.Header.Get("X-Forwarded-Proto")
+
+	switch {
+	case len(forwardedProto) > 0:
+		scheme = forwardedProto
+	case r.TLS != nil:
+		scheme = "https"
+	case len(r.URL.Scheme) > 0:
+		scheme = r.URL.Scheme
+	default:
+		scheme = "http"
+	}
+
+	host := r.Host
+	forwardedHost := r.Header.Get("X-Forwarded-Host")
+	if len(forwardedHost) > 0 {
+		// According to the Apache mod_proxy docs, X-Forwarded-Host can be a
+		// comma-separated list of hosts, to which each proxy appends the
+		// requested host. We want to grab the first from this comma-separated
+		// list.
+		hosts := strings.SplitN(forwardedHost, ",", 2)
+		host = strings.TrimSpace(hosts[0])
+	}
+
+	u := &url.URL{
+		Scheme: scheme,
+		Host:   host,
+	}
+
+	return u
 }

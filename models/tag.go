@@ -17,6 +17,7 @@ type Tag struct {
 	Memo       string    `json:"memo" orm:"null;type(text)"`
 	Created    time.Time `json:"created" orm:"auto_now_add;type(datetime)"`
 	Updated    time.Time `json:"updated" orm:"auto_now;type(datetime)"`
+	Conversion string    `json:"conversion" orm:"null;type(text)"`
 }
 
 func (t *Tag) TableUnique() [][]string {

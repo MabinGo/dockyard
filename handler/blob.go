@@ -18,6 +18,9 @@ import (
 	"github.com/containerops/dockyard/utils/setting"
 )
 
+//V2ConversionMap is to store schemav2 conversion info
+var V2ConversionMap = make(map[string][]byte)
+
 func HeadBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	digest := ctx.Params(":digest")
 	if !strings.Contains(digest, ":") {
@@ -53,6 +56,7 @@ func HeadBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 func PostBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
+	u := module.NewURLFromRequest(ctx.Req.Request)
 
 	var name string
 	if namespace == "" {
@@ -64,7 +68,7 @@ func PostBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 	uuid := utils.MD5(uuid.NewV4().String())
 
 	state := utils.MD5(fmt.Sprintf("%s/%s", name, time.Now().UnixNano()/int64(time.Millisecond)))
-	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", setting.ListenMode, setting.Domains, name, uuid, state)
+	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", u.Scheme, u.Host, name, uuid, state)
 
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	ctx.Resp.Header().Set("Docker-Upload-Uuid", uuid)
@@ -77,6 +81,7 @@ func PostBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 func PatchBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
+	u := module.NewURLFromRequest(ctx.Req.Request)
 
 	var name string
 	if namespace == "" {
@@ -101,6 +106,7 @@ func PatchBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte
 	}
 
 	data, _ := ctx.Req.Body().Bytes()
+	V2ConversionMap[namespace+"/"+repository] = data
 	if err := ioutil.WriteFile(layerPathTmp, data, 0777); err != nil {
 		log.Error("[REGISTRY API V2] Failed to save layer %v: %v", layerPathTmp, err.Error())
 
@@ -109,7 +115,7 @@ func PatchBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte
 	}
 
 	state := utils.MD5(fmt.Sprintf("%s/%s", name, time.Now().UnixNano()/int64(time.Millisecond)))
-	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", setting.ListenMode, setting.Domains, name, uuid, state)
+	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", u.Scheme, u.Host, name, uuid, state)
 
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	ctx.Resp.Header().Set("Docker-Upload-Uuid", uuid)
@@ -122,6 +128,7 @@ func PatchBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte
 func PutBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
+	u := module.NewURLFromRequest(ctx.Req.Request)
 
 	var name string
 	if namespace == "" {
@@ -166,7 +173,7 @@ func PutBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 		return http.StatusBadRequest, result
 	}
 
-	random := fmt.Sprintf("%s://%s/v2/%s/blobs/%s", setting.ListenMode, setting.Domains, name, digest)
+	random := fmt.Sprintf("%s://%s/v2/%s/blobs/%s", u.Scheme, u.Host, name, digest)
 
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)

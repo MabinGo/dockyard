@@ -31,6 +31,7 @@ func main() {
 
 	app.Commands = []cli.Command{
 		cmd.CmdWeb,
+		cmd.CmdEncrypt,
 	}
 
 	app.Flags = append(app.Flags, []cli.Flag{}...)

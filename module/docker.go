@@ -2,6 +2,7 @@
 package module
 
 import (
+	"crypto/sha512"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -11,7 +12,12 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/docker/distribution/digest"
+	"github.com/docker/distribution/manifest"
+	"github.com/docker/distribution/manifest/schema1"
+	"github.com/docker/libtrust"
 	"github.com/gorilla/mux"
 
 	"github.com/containerops/dockyard/backend"
@@ -123,6 +129,172 @@ func ParseManifest(data []byte, namespace, repository, tag string) (error, int64
 	}
 
 	return nil, schemaVersion
+}
+
+//SaveV2Conversion is to save schemav2 conversion info
+func SaveV2Conversion(namespace, repository, tag, v2conversion string) error {
+	t := new(models.Tag)
+	if exist, err := t.Get(namespace, repository, tag); err != nil {
+		return err
+	} else if !exist {
+		return fmt.Errorf("Tag is not exist")
+	}
+
+	if t.Schema == 2 {
+		t.Conversion = v2conversion
+	} else if t.Schema == 1 {
+		t.Conversion = ""
+	}
+	if err := t.Save(namespace, repository, tag); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+//ConvertSchema2Sign is to sign signatures
+func ConvertSchema2Sign(v1manifest schema1.Manifest) (string, error) {
+	p, err := json.MarshalIndent(v1manifest, " ", " ")
+	if err != nil {
+		return "", err
+	}
+	trustKey, err := libtrust.GenerateECP256PrivateKey()
+
+	js, err := libtrust.NewJSONSignature(p)
+	if err != nil {
+		return "", err
+	}
+	if err := js.Sign(trustKey); err != nil {
+		return "", err
+	}
+
+	pretty, err := js.PrettySignature("signatures")
+	if err != nil {
+		return "", err
+	}
+	return string(pretty), nil
+}
+
+//ConvertSchema2Manifest is schemav2 convert to schemav1
+func ConvertSchema2Manifest(t *models.Tag) (string, error) {
+	var tarsumlist []string
+	var v2manifest map[string]interface{}
+
+	var layers = []string{"", "fsLayers", "layers"}
+	var tarsums = []string{"", "blobSum", "digest"}
+	if err := json.Unmarshal([]byte(t.Manifest), &v2manifest); err != nil {
+		return "", err
+	}
+	schemaVersion := int64(v2manifest["schemaVersion"].(float64))
+	section := layers[schemaVersion]
+	item := tarsums[schemaVersion]
+	for i := 0; i <= len(v2manifest[section].([]interface{}))-1; i++ {
+		blobsum := v2manifest[section].([]interface{})[i].(map[string]interface{})[item].(string)
+		tarsumlist = append(tarsumlist, blobsum)
+	}
+
+	type imageRootFS struct {
+		Type      string          `json:"type"`
+		DiffIDs   []digest.Digest `json:"diff_ids,omitempty"`
+		BaseLayer string          `json:"base_layer,omitempty"`
+	}
+
+	type imageHistory struct {
+		Created    time.Time `json:"created"`
+		Author     string    `json:"author,omitempty"`
+		CreatedBy  string    `json:"created_by,omitempty"`
+		Comment    string    `json:"comment,omitempty"`
+		EmptyLayer bool      `json:"empty_layer,omitempty"`
+	}
+
+	type imageConfig struct {
+		RootFS       *imageRootFS   `json:"rootfs,omitempty"`
+		History      []imageHistory `json:"history,omitempty"`
+		Architecture string         `json:"architecture,omitempty"`
+	}
+
+	var img imageConfig
+	if err := json.Unmarshal([]byte(t.Conversion), &img); err != nil {
+		return "", err
+	}
+
+	type v1Compatibility struct {
+		ID              string    `json:"id"`
+		Parent          string    `json:"parent,omitempty"`
+		Comment         string    `json:"comment,omitempty"`
+		Created         time.Time `json:"created"`
+		ContainerConfig struct {
+			Cmd []string
+		} `json:"container_config,omitempty"`
+		ThrowAway bool `json:"throwaway,omitempty"`
+	}
+	fsLayerList := make([]schema1.FSLayer, len(img.History))
+	history := make([]schema1.History, len(img.History))
+
+	parent := ""
+	layerCounter := 0
+	var blobsum digest.Digest
+	for i, h := range img.History[:len(img.History)-1] {
+		if len(img.RootFS.DiffIDs) <= layerCounter {
+			return "", fmt.Errorf("too many non-empty layers in History section")
+		}
+		blobsum = digest.Digest(tarsumlist[layerCounter])
+		layerCounter++
+
+		v1ID := digest.FromBytes([]byte(blobsum.Hex() + " " + parent)).Hex()
+
+		if i == 0 && img.RootFS.BaseLayer != "" {
+			// windows-only baselayer setup
+			baseID := sha512.Sum384([]byte(img.RootFS.BaseLayer))
+			parent = fmt.Sprintf("%x", baseID[:32])
+		}
+
+		v1Compatibility := v1Compatibility{
+			ID:      v1ID,
+			Parent:  parent,
+			Comment: h.Comment,
+			Created: h.Created,
+		}
+		v1Compatibility.ContainerConfig.Cmd = []string{img.History[i].CreatedBy}
+		if h.EmptyLayer {
+			v1Compatibility.ThrowAway = true
+		}
+		jsonBytes, err := json.Marshal(&v1Compatibility)
+		if err != nil {
+			return "", err
+		}
+
+		reversedIndex := len(img.History) - i - 1
+		history[reversedIndex].V1Compatibility = string(jsonBytes)
+		fsLayerList[reversedIndex] = schema1.FSLayer{BlobSum: blobsum}
+
+		parent = v1ID
+	}
+	latestHistory := img.History[len(img.History)-1]
+	blobsum = digest.Digest(tarsumlist[layerCounter])
+
+	fsLayerList[0] = schema1.FSLayer{BlobSum: blobsum}
+	dgst := digest.FromBytes([]byte(blobsum.Hex() + " " + parent + " " + t.Conversion))
+
+	// Top-level v1compatibility string should be a modified version of the image config.
+	transformedConfig, err := schema1.MakeV1ConfigFromConfig([]byte(t.Conversion), dgst.Hex(), parent, latestHistory.EmptyLayer)
+	if err != nil {
+		return "", err
+	}
+	history[0].V1Compatibility = string(transformedConfig)
+
+	v1manifest := schema1.Manifest{
+		Versioned: manifest.Versioned{
+			SchemaVersion: 1,
+		},
+		Name:         t.Namespace + "/" + t.Repository,
+		Tag:          t.Tag,
+		Architecture: img.Architecture,
+		FSLayers:     fsLayerList,
+		History:      history,
+	}
+
+	return ConvertSchema2Sign(v1manifest)
 }
 
 func GetTarsumlist(data []byte) ([]string, error) {

@@ -9,12 +9,13 @@ import (
 	"gopkg.in/macaron.v1"
 
 	"github.com/containerops/dockyard/models"
-	"github.com/containerops/dockyard/utils/setting"
+	"github.com/containerops/dockyard/module"
 )
 
 func DiscoveryACIHandler(ctx *macaron.Context, log *logs.BeeLogger) {
 	namespace := ctx.Params(":namespace")
 	repository := ctx.Params(":repository")
+	u := module.NewURLFromRequest(ctx.Req.Request)
 
 	t, err := template.ParseFiles(models.TemplatePath)
 	if err != nil {
@@ -27,8 +28,8 @@ func DiscoveryACIHandler(ctx *macaron.Context, log *logs.BeeLogger) {
 	err = t.Execute(ctx.Resp, models.TemplateDesc{
 		Namespace:  namespace,
 		Repository: repository,
-		Domains:    setting.Domains,
-		ListenMode: setting.ListenMode,
+		Domains:    u.Host,
+		ListenMode: u.Scheme,
 	})
 	if err != nil {
 		log.Error("[ACI API] Failed to respond: %v", err.Error())
