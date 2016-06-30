@@ -131,6 +131,46 @@ func ParseManifest(data []byte, namespace, repository, tag string) (error, int64
 	return nil, schemaVersion
 }
 
+//digestSHA256GzippedEmptyTar is the canonical sha256 digest of gzippedEmptyTar
+const digestSHA256GzippedEmptyTar = digest.Digest("sha256:a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4")
+
+// gzippedEmptyTar is a gzip-compressed version of an empty tar file
+var gzippedEmptyTar = []byte{
+	31, 139, 8, 0, 0, 9, 110, 136, 0, 255, 98, 24, 5, 163, 96, 20, 140, 88,
+	0, 8, 0, 0, 255, 255, 46, 175, 181, 239, 0, 4, 0, 0,
+}
+
+//SaveGzippedEmptyTar is to save gzippedEmptyTar image
+func SaveGzippedEmptyTar() error {
+	tarsum := "a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4"
+	i := new(models.Image)
+	if exists, err := i.Get(tarsum); err != nil {
+		return err
+	} else if exists {
+		return nil
+	}
+	imagePath := GetImagePath(tarsum, setting.APIVERSION_V2)
+	layerPath := GetLayerPath(tarsum, "layer", setting.APIVERSION_V2)
+
+	if !utils.IsDirExist(imagePath) {
+		os.MkdirAll(imagePath, os.ModePerm)
+	}
+	if utils.IsFileExist(layerPath) {
+		os.Remove(layerPath)
+	}
+
+	if err := ioutil.WriteFile(layerPath, gzippedEmptyTar, 0777); err != nil {
+		return err
+	}
+
+	i.Path, i.Size = layerPath, int64(len(gzippedEmptyTar))
+	if err := i.Save(tarsum); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 //SaveV2Conversion is to save schemav2 conversion info
 func SaveV2Conversion(namespace, repository, tag, v2conversion string) error {
 	t := new(models.Tag)
@@ -141,9 +181,9 @@ func SaveV2Conversion(namespace, repository, tag, v2conversion string) error {
 	}
 
 	if t.Schema == 2 {
-		t.Conversion = v2conversion
-	} else if t.Schema == 1 {
-		t.Conversion = ""
+		if v2conversion != "" {
+			t.Conversion = v2conversion
+		}
 	}
 	if err := t.Save(namespace, repository, tag); err != nil {
 		return err
@@ -235,11 +275,18 @@ func ConvertSchema2Manifest(t *models.Tag) (string, error) {
 	layerCounter := 0
 	var blobsum digest.Digest
 	for i, h := range img.History[:len(img.History)-1] {
-		if len(img.RootFS.DiffIDs) <= layerCounter {
-			return "", fmt.Errorf("too many non-empty layers in History section")
+		if h.EmptyLayer {
+			if err := SaveGzippedEmptyTar(); err != nil {
+				return "", err
+			}
+			blobsum = digestSHA256GzippedEmptyTar
+		} else {
+			if len(img.RootFS.DiffIDs) <= layerCounter {
+				return "", fmt.Errorf("too many non-empty layers in History section")
+			}
+			blobsum = digest.Digest(tarsumlist[layerCounter])
+			layerCounter++
 		}
-		blobsum = digest.Digest(tarsumlist[layerCounter])
-		layerCounter++
 
 		v1ID := digest.FromBytes([]byte(blobsum.Hex() + " " + parent)).Hex()
 
@@ -270,8 +317,19 @@ func ConvertSchema2Manifest(t *models.Tag) (string, error) {
 
 		parent = v1ID
 	}
+
 	latestHistory := img.History[len(img.History)-1]
-	blobsum = digest.Digest(tarsumlist[layerCounter])
+	if latestHistory.EmptyLayer {
+		if err := SaveGzippedEmptyTar(); err != nil {
+			return "", err
+		}
+		blobsum = digestSHA256GzippedEmptyTar
+	} else {
+		if len(img.RootFS.DiffIDs) <= layerCounter {
+			return "", fmt.Errorf("too many non-empty layers in History section")
+		}
+		blobsum = digest.Digest(tarsumlist[layerCounter-1])
+	}
 
 	fsLayerList[0] = schema1.FSLayer{BlobSum: blobsum}
 	dgst := digest.FromBytes([]byte(blobsum.Hex() + " " + parent + " " + t.Conversion))
