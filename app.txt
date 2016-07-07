@@ -1,0 +1,81 @@
+1.GET /app/v1/:namespace/:repository/:os/:arch/:app
+Host: <registry host>
+Authorization: <scheme> <token>
+
+http code：200
+Content-Length: <length>
+Content-Range: bytes <start>-<end>/<size>
+Content-Type: application/octet-stream
+http body：<blob binary data>
+
+2.POST /app/v1/:namespace/:repository
+Host: <registry host>
+Authorization: <scheme> <token>
+
+http code:   202
+App-Upload-UUID: <Random UUID>
+
+3.PUT /app/v1/:namespace/:repository/:os/:arch/:app
+Host: <registry host>
+Authorization: <scheme> <token>
+App-Upload-UUID: <UUID>
+Digest: <sha512>
+Body：<blob binary data>
+
+http code：201
+
+4.PUT /app/v1/:namespace/:repository/:os/:arch/:app/manifests
+Host: <registry host>
+Authorization: <scheme> <token>
+App-Upload-UUID: <UUID>
+Digest: <sha512>
+Body：<manifest data>
+
+http code：201
+
+5.PATCH /app/v1/:namespace/:repository/:os/:arch/:app/:status
+Host: <registry host>
+Authorization: <scheme> <token>
+App-Upload-UUID: <Random UUID>
+
+http code：202
+
+6.DELETE /app/v1/:namespace/:repository/:os/:arch/:app
+Host: <registry host>
+Authorization: <scheme> <token>
+
+http code：200
+
+7.GET /app/v1/search
+url parameter: url?key=app name
+Header:
+Host: <registry host>
+Authorization: <scheme> <token>
+
+http code：200
+Body：<json data>
+包括：名称，版本号，描述，大小，创建时间，更新时间
+
+8.GET /app/v1/:namespace/:repository/search
+url parameter: url?key=app name
+Header:
+Host: <registry host>
+Authorization: <scheme> <token>
+
+http code：200
+Body：<json data>
+包括：名称，版本号，描述，大小，创建时间，更新时间
+
+
+
+
+
+
+
+
+
+
+
+
+
+
