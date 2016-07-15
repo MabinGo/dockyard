@@ -24,8 +24,8 @@ _testmain.go
 *.prof
 
 dockyard
-conf/runtime.conf
+#conf/runtime.conf
 log/*
 data/*
 
-auth
+#auth

@@ -1,4 +1,4 @@
-package authtest
+package repositorytest
 
 import (
 	"encoding/json"
@@ -7,23 +7,29 @@ import (
 
 	"github.com/containerops/dockyard/auth/controller"
 	"github.com/containerops/dockyard/auth/dao"
+	"github.com/containerops/dockyard/test/authtest"
 	"github.com/containerops/dockyard/utils/setting"
 )
 
 func Test_RepositoryInit(t *testing.T) {
-	signUp(orgAdmin, t)
-	signUp(orgMember, t)
-	signUp(teamAdmin, t)
-	signUp(teamMember, t)
-	createOrganization(org1, orgAdmin, t)
-	addUserToOrganization(oum1, orgAdmin, t)
-	addUserToOrganization(oum2, orgAdmin, t)
-	addUserToOrganization(oum3, orgAdmin, t)
-	createTeam(team1, orgAdmin, t)
-	addUserToTeam(tum1, orgAdmin, t)
-	addUserToTeam(tum2, orgAdmin, t)
+	repositorytestInit(t)
+
+	authtest.SignUp(t, orgAdmin)
+	authtest.SignUp(t, orgMember)
+	authtest.SignUp(t, teamAdmin)
+	authtest.SignUp(t, teamMember)
+	authtest.CreateOrganization(t, org1, orgAdmin.Name, orgAdmin.Password)
+	authtest.AddUserToOrganization(t, oum1, orgAdmin.Name, orgAdmin.Password)
+	authtest.AddUserToOrganization(t, oum2, orgAdmin.Name, orgAdmin.Password)
+	authtest.AddUserToOrganization(t, oum3, orgAdmin.Name, orgAdmin.Password)
+	authtest.CreateTeam(t, team1, orgAdmin.Name, orgAdmin.Password)
+	authtest.AddUserToTeam(t, tum1, orgAdmin.Name, orgAdmin.Password)
+	authtest.AddUserToTeam(t, tum2, orgAdmin.Name, orgAdmin.Password)
 }
 
+//
+//1.============================== Test CreateRepository API ==============================
+//
 // Create repository test
 func Test_UserCreateRepository(t *testing.T) {
 	repo := &controller.RepositoryJSON{
@@ -201,6 +207,9 @@ func Test_NoOrgRightToCreateRepository(t *testing.T) {
 	}
 }
 
+//
+//2.============================== Test team addRepository API ==============================
+//
 func Test_TeamAddRepository(t *testing.T) {
 	repo := &controller.TeamRepositoryMapJSON{
 		OrgName:  team1.OrgName,
@@ -284,6 +293,10 @@ func Test_NoRightToAddRepository(t *testing.T) {
 		}
 	}
 }
+
+//
+//3.============================== Test  Update Repository  API ==============================
+//
 
 // Update Repository Test
 // orgAdmin update Org repository
@@ -433,6 +446,9 @@ func Test_sysAdminUpdateUserRepository(t *testing.T) {
 	}
 }
 
+//
+//4.============================== Test  Update TeamRepositoryMap  API ==============================
+//
 //Update TeamRepositoryMap Test
 // teamAdmin update team repository map
 func Test_teamAdminUpdateTeamRepository(t *testing.T) {
@@ -556,6 +572,27 @@ func Test_orgAdminUpdateEmptyTeamRepository(t *testing.T) {
 		}
 	}
 }
+
+// sysAdmin Use Wrong Parameter update team repository map
+func Test_UseWrongParameterUpdateTeamRepository(t *testing.T) {
+	repo := &controller.TeamRepositoryMapJSON{
+		OrgName:  team1.OrgName,
+		RepoName: "test1",
+		TeamName: team1.TeamName,
+		Permit:   dao.READ,
+		Status:   1, // Status can not update
+	}
+
+	if err := updateTeamRepositoryMap(repo, sysAdmin); err != nil {
+		if !strings.HasPrefix(err.Error(), "HttpRespose") {
+			t.Error(err)
+		}
+	}
+}
+
+//
+//5.============================== Test  Delete Repository  API ==============================
+//
 
 // Delete Test
 func Test_NamespaceEmptyDeleteRepository(t *testing.T) {
@@ -727,11 +764,108 @@ func Test_SysAdminDeleteOrgRepository(t *testing.T) {
 	}
 }
 
-func Test_RepositoryClear(t *testing.T) {
-	deleteOrganization(org1, orgAdmin, t)
-	deleteRepository(orgAdmin.Name, "test1", orgAdmin)
-	deleteRepository(orgMember.Name, "user_repo", sysAdmin)
+//
+//6.============================== Test DeactiveRepo API ==============================
+//
+func Test_DeactiveRepo(t *testing.T) {
+	setUpTest(t)
+	url := setting.ListenMode + "://" + authtest.Domains + "/uam/repository/deactive/" + repoEx.OrgName + "/" + repoEx.Name
+	if err := authtest.MethodFunc("DELETE", url, nil, orgAdmin); err != nil {
+		t.Errorf("DeactiveRepo: %v", err.Error())
+	}
+	tearDownTest(t)
 }
+
+func Test_SysAdminDeactiveRepo(t *testing.T) {
+	setUpTest(t)
+	url := setting.ListenMode + "://" + authtest.Domains + "/uam/repository/deactive/" + repoEx.OrgName + "/" + repoEx.Name
+	if err := authtest.MethodFunc("DELETE", url, nil, sysAdmin); err != nil {
+		t.Errorf("DeactiveRepo: %v", err.Error())
+	}
+	tearDownTest(t)
+}
+
+func Test_DeactiveInactiveRepo(t *testing.T) {
+	setUpTest(t)
+	url := setting.ListenMode + "://" + authtest.Domains + "/uam/repository/deactive/" + repoEx.OrgName + "/" + repoEx.Name
+	if err := authtest.MethodFunc("DELETE", url, nil, orgAdmin); err != nil {
+		t.Errorf("DeactiveInactiveRepo: %v", err.Error())
+	}
+	if err := authtest.MethodFunc("DELETE", url, nil, orgAdmin); err == nil {
+		t.Errorf("DeactiveInactiveRepo Error")
+	}
+	tearDownTest(t)
+}
+
+//
+//7.============================== Test ActiveRepo API ==============================
+//
+func Test_ActiveRepo(t *testing.T) {
+	setUpTest(t)
+	url := setting.ListenMode + "://" + authtest.Domains + "/uam/repository/deactive/" + repoEx.OrgName + "/" + repoEx.Name
+	if err := authtest.MethodFunc("DELETE", url, nil, orgAdmin); err != nil {
+		t.Errorf("DeactiveRepo: %v", err.Error())
+	}
+
+	url = setting.ListenMode + "://" + authtest.Domains + "/uam/repository/active/" + repoEx.OrgName + "/" + repoEx.Name
+	if err := authtest.MethodFunc("PUT", url, nil, orgAdmin); err != nil {
+		t.Errorf("ActiveRepo: %v", err.Error())
+	}
+	tearDownTest(t)
+}
+
+func Test_SysAdminActiveRepo(t *testing.T) {
+	setUpTest(t)
+	url := setting.ListenMode + "://" + authtest.Domains + "/uam/repository/deactive/" + repoEx.OrgName + "/" + repoEx.Name
+	if err := authtest.MethodFunc("DELETE", url, nil, sysAdmin); err != nil {
+		t.Errorf("DeactiveRepo: %v", err.Error())
+	}
+
+	url = setting.ListenMode + "://" + authtest.Domains + "/uam/repository/active/" + repoEx.OrgName + "/" + repoEx.Name
+	if err := authtest.MethodFunc("PUT", url, nil, sysAdmin); err != nil {
+		t.Errorf("ActiveRepo: %v", err.Error())
+	}
+	tearDownTest(t)
+}
+
+func Test_RepeatActiveRepo(t *testing.T) {
+	setUpTest(t)
+	url := setting.ListenMode + "://" + authtest.Domains + "/uam/repository/deactive/" + repoEx.OrgName + "/" + repoEx.Name
+	if err := authtest.MethodFunc("DELETE", url, nil, orgAdmin); err != nil {
+		t.Errorf("DeactiveInactiveRepo: %v", err.Error())
+	}
+
+	url = setting.ListenMode + "://" + authtest.Domains + "/uam/repository/active/" + repoEx.OrgName + "/" + repoEx.Name
+	if err := authtest.MethodFunc("PUT", url, nil, orgAdmin); err != nil {
+		t.Errorf("ActiveRepo: %v", err.Error())
+	}
+	if err := authtest.MethodFunc("PUT", url, nil, orgAdmin); err == nil {
+		t.Errorf("RepeatActiveRepo Error")
+	}
+	tearDownTest(t)
+}
+
+func Test_PullActiveRepo(t *testing.T) {
+	setUpTest(t)
+	if err := pushImage(org1, teamAdmin); err != nil {
+		t.Error(err)
+	}
+	url := setting.ListenMode + "://" + authtest.Domains + "/uam/repository/deactive/" + repoEx.OrgName + "/" + repoEx.Name
+	if err := authtest.MethodFunc("DELETE", url, nil, orgAdmin); err != nil {
+		t.Errorf("DeactiveRepo: %v", err.Error())
+	}
+
+	url = setting.ListenMode + "://" + authtest.Domains + "/uam/repository/active/" + repoEx.OrgName + "/" + repoEx.Name
+	if err := authtest.MethodFunc("PUT", url, nil, orgAdmin); err != nil {
+		t.Errorf("ActiveRepo: %v", err.Error())
+	}
+	if err := pullImage(org1, teamAdmin); err != nil {
+		t.Error(err)
+	}
+	tearDownTest(t)
+}
+
+//================================================================================================
 
 func createRepository(repo *controller.RepositoryJSON, user *dao.User) error {
 	b, err := json.Marshal(repo)
@@ -739,8 +873,8 @@ func createRepository(repo *controller.RepositoryJSON, user *dao.User) error {
 		return err
 	}
 
-	url := setting.ListenMode + "://" + Domains + "/uam/repository/"
-	if err = methodFunc("POST", url, strings.NewReader(string(b)), user); err != nil {
+	url := setting.ListenMode + "://" + authtest.Domains + "/uam/repository/"
+	if err = authtest.MethodFunc("POST", url, strings.NewReader(string(b)), user); err != nil {
 		return err
 	}
 
@@ -753,8 +887,8 @@ func updateRepository(repo *controller.RepositoryJSON, user *dao.User) error {
 		return err
 	}
 
-	url := setting.ListenMode + "://" + Domains + "/uam/repository/update"
-	if err := methodFunc("PUT", url, strings.NewReader(string(b)), user); err != nil {
+	url := setting.ListenMode + "://" + authtest.Domains + "/uam/repository/update"
+	if err := authtest.MethodFunc("PUT", url, strings.NewReader(string(b)), user); err != nil {
 		return err
 	}
 
@@ -767,8 +901,8 @@ func updateTeamRepositoryMap(repo *controller.TeamRepositoryMapJSON, user *dao.U
 		return err
 	}
 
-	url := setting.ListenMode + "://" + Domains + "/uam/team/updateteamrepositorymap"
-	if err := methodFunc("PUT", url, strings.NewReader(string(b)), user); err != nil {
+	url := setting.ListenMode + "://" + authtest.Domains + "/uam/team/updateteamrepositorymap"
+	if err := authtest.MethodFunc("PUT", url, strings.NewReader(string(b)), user); err != nil {
 		return err
 	}
 
@@ -776,8 +910,8 @@ func updateTeamRepositoryMap(repo *controller.TeamRepositoryMapJSON, user *dao.U
 }
 
 func deleteRepository(namespace, repository string, user *dao.User) error {
-	url := setting.ListenMode + "://" + Domains + "/uam/repository/" + namespace + "/" + repository
-	if err := methodFunc("DELETE", url, nil, user); err != nil {
+	url := setting.ListenMode + "://" + authtest.Domains + "/uam/repository/" + namespace + "/" + repository
+	if err := authtest.MethodFunc("DELETE", url, nil, user); err != nil {
 		return err
 	}
 
@@ -790,8 +924,8 @@ func addRepository(repo *controller.TeamRepositoryMapJSON, user *dao.User) error
 		return err
 	}
 
-	url := setting.ListenMode + "://" + Domains + "/uam/team/addrepository"
-	if err = methodFunc("POST", url, strings.NewReader(string(b)), user); err != nil {
+	url := setting.ListenMode + "://" + authtest.Domains + "/uam/team/addrepository"
+	if err = authtest.MethodFunc("POST", url, strings.NewReader(string(b)), user); err != nil {
 		return err
 	}
 
@@ -799,10 +933,20 @@ func addRepository(repo *controller.TeamRepositoryMapJSON, user *dao.User) error
 }
 
 func removeRepository(organization, team, repository string, user *dao.User) error {
-	url := setting.ListenMode + "://" + Domains + "/uam/team/removerepository/" + organization + "/" + team + "/" + repository
-	if err := methodFunc("DELETE", url, nil, user); err != nil {
+	url := setting.ListenMode + "://" + authtest.Domains + "/uam/team/removerepository/" + organization + "/" + team + "/" + repository
+	if err := authtest.MethodFunc("DELETE", url, nil, user); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func Test_RepositoryClear(t *testing.T) {
+	authtest.DeleteOrganization(t, org1.Name, orgAdmin.Name, orgAdmin.Password)
+	deleteRepository(orgAdmin.Name, "test1", orgAdmin)
+	deleteRepository(orgMember.Name, "user_repo", sysAdmin)
+	authtest.DeleteUser(t, orgAdmin.Name, sysAdmin.Name, sysAdmin.Password)
+	authtest.DeleteUser(t, orgMember.Name, sysAdmin.Name, sysAdmin.Password)
+	authtest.DeleteUser(t, teamAdmin.Name, sysAdmin.Name, sysAdmin.Password)
+	authtest.DeleteUser(t, teamMember.Name, sysAdmin.Name, sysAdmin.Password)
 }

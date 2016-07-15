@@ -223,6 +223,8 @@ func cleartable(tablelist []string) error {
 }
 
 func TestGetOrganizationList(t *testing.T) {
+	OpenDB(t)
+
 	//clear user and organization table
 	if err := cleartable([]string{"user", "organization"}); err != nil {
 		t.Error(err)
