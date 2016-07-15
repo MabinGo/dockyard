@@ -197,6 +197,7 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 	if err = json.Unmarshal(body, &token); err != nil {
 		return false, err
 	}
+
 	bearer := "Bearer" + " " + token["token"]
 	if _, err := accessControllers[setting.Authmode].Authorized(bearer, accessRecords...); err != nil {
 		switch err := err.(type) {

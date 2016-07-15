@@ -107,6 +107,7 @@ func SetRouters(m *macaron.Macaron) {
 			m.Get("/signin", controller.SignIn)
 			m.Put("/update", controller.UpdateUser)
 			m.Post("/add", controller.CreateUser)
+			m.Get("/list", controller.GetUserList)
 			m.Delete("/:user", controller.DeleteUser)
 			m.Delete("/deactive/:user", controller.DeactiveUser)
 			m.Put("/active/:user", controller.ActiveUser)

@@ -83,29 +83,12 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		return http.StatusBadRequest, result
 	}
 
-	V2Conversion := []byte{}
-	for k, v := range V2ConversionMap {
-		if k == namespace+"/"+repository {
-			V2Conversion = v
-		}
-	}
-	if err := module.SaveV2Conversion(namespace, repository, tag, string(V2Conversion)); err != nil {
+	if err := module.SaveV2Conversion(namespace, repository, tag); err != nil {
 		log.Error("[REGISTRY API V2] Failed to save v2conversion: " + err.Error())
 
 		detail := map[string]string{"Name": name, "Tag": tag}
 		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
 		return http.StatusInternalServerError, result
-	}
-	if exist, err := t.Get(namespace, repository, tag); err != nil {
-		log.Error("[REGISTRY API V2] Failed to get manifest: " + err.Error())
-
-		detail := map[string]string{"Name": name, "Tag": tag}
-		result, _ := module.ReportError(module.UNKNOWN, detail)
-		return http.StatusBadRequest, result
-	} else if exist {
-		if t.Schema == 2 {
-			delete(V2ConversionMap, namespace+"/"+repository)
-		}
 	}
 
 	random := fmt.Sprintf("%s://%s/v2/%s/manifests/%s",

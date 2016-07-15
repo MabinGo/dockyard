@@ -172,7 +172,7 @@ func SaveGzippedEmptyTar() error {
 }
 
 //SaveV2Conversion is to save schemav2 conversion info
-func SaveV2Conversion(namespace, repository, tag, v2conversion string) error {
+func SaveV2Conversion(namespace, repository, tag string) error {
 	t := new(models.Tag)
 	if exist, err := t.Get(namespace, repository, tag); err != nil {
 		return err
@@ -181,9 +181,25 @@ func SaveV2Conversion(namespace, repository, tag, v2conversion string) error {
 	}
 
 	if t.Schema == 2 {
-		if v2conversion != "" {
-			t.Conversion = v2conversion
+		var manifest map[string]interface{}
+		if err := json.Unmarshal([]byte(t.Manifest), &manifest); err != nil {
+			return err
 		}
+		confblobsum := manifest["config"].(map[string]interface{})["digest"].(string)
+		tarsum := strings.Split(confblobsum, ":")[1]
+
+		i := new(models.Image)
+		if exist, err := i.Get(tarsum); err != nil {
+			return err
+		} else if !exist {
+			return fmt.Errorf("Config blob is not exist")
+		}
+
+		layer, err := DownloadLayer(i.Path)
+		if err != nil {
+			return err
+		}
+		t.Conversion = string(layer)
 	}
 	if err := t.Save(namespace, repository, tag); err != nil {
 		return err

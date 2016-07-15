@@ -18,9 +18,6 @@ import (
 	"github.com/containerops/dockyard/utils/setting"
 )
 
-//V2ConversionMap is to store schemav2 conversion info
-var V2ConversionMap = make(map[string][]byte)
-
 func HeadBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	digest := ctx.Params(":digest")
 	if !strings.Contains(digest, ":") {
@@ -106,7 +103,6 @@ func PatchBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte
 	}
 
 	data, _ := ctx.Req.Body().Bytes()
-	V2ConversionMap[namespace+"/"+repository] = data
 	if err := ioutil.WriteFile(layerPathTmp, data, 0777); err != nil {
 		log.Error("[REGISTRY API V2] Failed to save layer %v: %v", layerPathTmp, err.Error())
 
