@@ -54,6 +54,8 @@ func PostBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
 	u := module.NewURLFromRequest(ctx.Req.Request)
+	from := ctx.Query("from")
+	mount := ctx.Query("mount")
 
 	var name string
 	if namespace == "" {
@@ -62,8 +64,16 @@ func PostBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 		name = namespace + "/" + repository
 	}
 
-	uuid := utils.MD5(uuid.NewV4().String())
+	if name != from && from != "" && mount != "" {
+		random := fmt.Sprintf("%s://%s/v2/%s/blobs/%s", u.Scheme, u.Host, name, mount)
+		ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		ctx.Resp.Header().Set("Docker-Content-Digest", mount)
+		ctx.Resp.Header().Set("Location", random)
 
+		return http.StatusCreated, []byte("")
+	}
+
+	uuid := utils.MD5(uuid.NewV4().String())
 	state := utils.MD5(fmt.Sprintf("%s/%s", name, time.Now().UnixNano()/int64(time.Millisecond)))
 	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", u.Scheme, u.Host, name, uuid, state)
 

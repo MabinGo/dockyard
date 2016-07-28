@@ -83,14 +83,6 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		return http.StatusBadRequest, result
 	}
 
-	if err := module.SaveV2Conversion(namespace, repository, tag); err != nil {
-		log.Error("[REGISTRY API V2] Failed to save v2conversion: " + err.Error())
-
-		detail := map[string]string{"Name": name, "Tag": tag}
-		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
-		return http.StatusInternalServerError, result
-	}
-
 	random := fmt.Sprintf("%s://%s/v2/%s/manifests/%s",
 		u.Scheme,
 		u.Host,
@@ -127,6 +119,14 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 			result, _ := module.ReportError(module.MANIFEST_BLOB_UNKNOWN, detail)
 			return http.StatusBadRequest, result
 		}
+	}
+
+	if err := module.SaveV2Conversion(namespace, repository, tag); err != nil {
+		log.Error("[REGISTRY API V2] Failed to save v2conversion: " + err.Error())
+
+		detail := map[string]string{"Name": name, "Tag": tag}
+		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
+		return http.StatusInternalServerError, result
 	}
 
 	//TODO:

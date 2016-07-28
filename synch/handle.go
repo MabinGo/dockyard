@@ -10,12 +10,67 @@ import (
 	"github.com/containerops/dockyard/models"
 )
 
+func PostSynMasterHandler(ctx *macaron.Context) (int, []byte) {
+	var result []byte
+
+	body, _ := ctx.Req.Body().Bytes()
+	if err := SaveContent(MASTER, body); err != nil {
+		synlog.Error("[REGISTRY API] Failed to save master content: %s", err.Error())
+
+		result, _ = json.Marshal(map[string]string{"message": "Failed to save master content"})
+		return http.StatusInternalServerError, result
+	}
+
+	result, _ = json.Marshal(map[string]string{"message": "Successed to register master synchron info"})
+	return http.StatusOK, result
+}
+
+func GetSynMasterHandler(ctx *macaron.Context) (int, []byte) {
+	var result []byte
+
+	drclist, err := GetSynList(MASTER)
+	if err != nil {
+		synlog.Error("[REGISTRY API] Failed to get master list: %s", err.Error())
+
+		result, _ = json.Marshal(map[string]string{"message": "Failed to get master list"})
+		return http.StatusInternalServerError, result
+	} else if drclist == "" {
+		synlog.Error("[REGISTRY API] Failed to get master list: No endpoint in the master region")
+
+		result, _ = json.Marshal(map[string]string{"message": "No endpoint in the master region"})
+		return http.StatusNotFound, result
+	}
+
+	return http.StatusOK, []byte(drclist)
+}
+
+func DelSynMasterHandler(ctx *macaron.Context) (int, []byte) {
+	var result []byte
+
+	body, _ := ctx.Req.Body().Bytes()
+	if exists, err := DelSynEndpoint(MASTER, body); err != nil {
+		synlog.Error("[REGISTRY API] Failed to delete syn master endpoint: %s", err.Error())
+
+		result, _ = json.Marshal(map[string]string{"message": "Failed to delete syn master endpoint"})
+		return http.StatusInternalServerError, result
+	} else if !exists {
+		synlog.Error("[REGISTRY API] Failed to delete syn master: not found endpoint")
+
+		result, _ = json.Marshal(map[string]string{"message": "Not found endpoint"})
+		return http.StatusNotFound, result
+	}
+
+	info := fmt.Sprintf("Successed to delete master endpoint")
+	result, _ = json.Marshal(map[string]string{"message": info})
+	return http.StatusOK, result
+}
+
 func PostSynDRCHandler(ctx *macaron.Context) (int, []byte) {
 	var result []byte
 
 	body, _ := ctx.Req.Body().Bytes()
-	if err := SaveDRCContent(body); err != nil {
-		synlog.Error("[REGISTRY API] Failed to get DRC content: %s", err.Error())
+	if err := SaveContent(DRC, body); err != nil {
+		synlog.Error("[REGISTRY API] Failed to save DRC content: %s", err.Error())
 
 		result, _ = json.Marshal(map[string]string{"message": "Failed to save DRC content"})
 		return http.StatusInternalServerError, result
@@ -116,7 +171,7 @@ func PutSynContentHandler(ctx *macaron.Context) (int, []byte) {
 func GetSynDRCHandler(ctx *macaron.Context) (int, []byte) {
 	var result []byte
 
-	drclist, err := GetSynDRCList()
+	drclist, err := GetSynList(DRC)
 	if err != nil {
 		synlog.Error("[REGISTRY API] Failed to get DRC list: %s", err.Error())
 
@@ -184,7 +239,7 @@ func DelSynDRCHandler(ctx *macaron.Context) (int, []byte) {
 	var result []byte
 
 	body, _ := ctx.Req.Body().Bytes()
-	if exists, err := DelSynDRC(body); err != nil {
+	if exists, err := DelSynEndpoint(DRC, body); err != nil {
 		synlog.Error("[REGISTRY API] Failed to delete syn DRC endpoint: %s", err.Error())
 
 		result, _ = json.Marshal(map[string]string{"message": "Failed to delete syn DRC endpoint"})

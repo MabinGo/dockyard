@@ -67,7 +67,7 @@ func TrigSynEndpoint(region *Region, auth string) error {
 
 	activecnt := 0
 	errs := []string{}
-	for k, _ := range eplist.Endpoints {
+	for k := range eplist.Endpoints {
 		if eplist.Endpoints[k].Active == false {
 			activecnt++
 			continue
@@ -291,7 +291,7 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 	if exists, err := regionIn.Get(namespace, repository, tag); err != nil {
 		return err
 	} else if !exists {
-		for k, _ := range eplist.Endpoints {
+		for k := range eplist.Endpoints {
 			eplist.Endpoints[k].Status = ORIGION
 		}
 		result, _ := json.Marshal(eplist)
@@ -338,7 +338,7 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 	return nil
 }
 
-func SaveDRCContent(reqbody []byte) error {
+func SaveContent(regiontyp string, reqbody []byte) error {
 	eplistIn := new(Endpointlist)
 	if err := json.Unmarshal(reqbody, eplistIn); err != nil {
 		return err
@@ -351,12 +351,29 @@ func SaveDRCContent(reqbody []byte) error {
 		return fmt.Errorf("region table not found")
 	}
 
+	var list string
 	eplistOri := new(Endpointlist)
-	if rt.DRClist != "" {
-		if err := json.Unmarshal([]byte(rt.DRClist), eplistOri); err != nil {
-			return err
+	switch regiontyp {
+	case MASTER:
+		if rt.Masterlist != "" {
+			if err := json.Unmarshal([]byte(rt.Masterlist), eplistOri); err != nil {
+				return err
+			}
 		}
+		list = rt.Masterlist
+	case DRC:
+		if rt.DRClist != "" {
+			if err := json.Unmarshal([]byte(rt.DRClist), eplistOri); err != nil {
+				return err
+			}
+		}
+		list = rt.DRClist
+	case COMMON:
+	default:
+		return fmt.Errorf("not support region type")
+	}
 
+	if list != "" {
 		for _, epin := range eplistIn.Endpoints {
 			exists := false
 			for k, v := range eplistOri.Endpoints {
@@ -375,13 +392,19 @@ func SaveDRCContent(reqbody []byte) error {
 		}
 	} else {
 		eplistOri = eplistIn
-		for k, _ := range eplistOri.Endpoints {
+		for k := range eplistOri.Endpoints {
 			eplistOri.Endpoints[k].Status = ORIGION
 		}
 	}
 
 	result, _ := json.Marshal(eplistOri)
-	rt.DRClist = string(result)
+	if regiontyp == MASTER {
+		rt.Masterlist = string(result)
+	} else if regiontyp == DRC {
+		rt.DRClist = string(result)
+	} else {
+	}
+
 	if err := rt.Save(RTName); err != nil {
 		return err
 	}
@@ -431,7 +454,7 @@ func UpdateRegionList(regionIn *Region) error {
 	return nil
 }
 
-func GetSynDRCList() (string, error) {
+func GetSynList(regiontyp string) (string, error) {
 	rt := new(RegionTable)
 	if exists, err := rt.Get(RTName); err != nil {
 		return "", err
@@ -439,7 +462,14 @@ func GetSynDRCList() (string, error) {
 		return "", fmt.Errorf("region table invalid")
 	}
 
-	return rt.DRClist, nil
+	var list string
+	if regiontyp == MASTER {
+		list = rt.Masterlist
+	} else if regiontyp == DRC {
+		list = rt.DRClist
+	}
+
+	return list, nil
 }
 
 func GetSynRegionEndpoint(namespace, repository, tag string) (string, error) {
@@ -519,7 +549,7 @@ func DelSynRegion(namespace, repository, tag string, reqbody []byte) (bool, erro
 	return true, nil
 }
 
-func DelSynDRC(reqbody []byte) (bool, error) {
+func DelSynEndpoint(regiontyp string, reqbody []byte) (bool, error) {
 	eplistIn := new(Endpointlist)
 	if err := json.Unmarshal(reqbody, eplistIn); err != nil {
 		return false, err
@@ -532,13 +562,27 @@ func DelSynDRC(reqbody []byte) (bool, error) {
 		return false, fmt.Errorf("not found region table")
 	}
 
-	if len(rt.DRClist) <= 0 {
-		return false, fmt.Errorf("DRC list is null")
-	}
-
 	eplist := new(Endpointlist)
-	if err := json.Unmarshal([]byte(rt.DRClist), eplist); err != nil {
-		return false, err
+	switch regiontyp {
+	case MASTER:
+		if len(rt.Masterlist) <= 0 {
+			return false, fmt.Errorf("Master list is null")
+		}
+
+		if err := json.Unmarshal([]byte(rt.Masterlist), eplist); err != nil {
+			return false, err
+		}
+	case DRC:
+		if len(rt.DRClist) <= 0 {
+			return false, fmt.Errorf("DRC list is null")
+		}
+
+		if err := json.Unmarshal([]byte(rt.DRClist), eplist); err != nil {
+			return false, err
+		}
+	case COMMON:
+	default:
+		return false, fmt.Errorf("not support region type")
 	}
 
 	orilen := len(eplist.Endpoints)
@@ -561,7 +605,11 @@ func DelSynDRC(reqbody []byte) (bool, error) {
 
 	newlen := len(eplistNew.Endpoints)
 	if newlen == 0 {
-		rt.DRClist = ""
+		if regiontyp == MASTER {
+			rt.Masterlist = ""
+		} else if regiontyp == DRC {
+			rt.DRClist = ""
+		}
 		return true, rt.Save(RTName)
 	}
 
@@ -570,7 +618,11 @@ func DelSynDRC(reqbody []byte) (bool, error) {
 	}
 
 	result, _ := json.Marshal(eplistNew)
-	rt.DRClist = string(result)
+	if regiontyp == MASTER {
+		rt.Masterlist = string(result)
+	} else if regiontyp == DRC {
+		rt.DRClist = string(result)
+	}
 
 	if err := rt.Save(RTName); err != nil {
 		return false, err

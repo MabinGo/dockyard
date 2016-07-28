@@ -13,6 +13,7 @@ type RegionTable struct {
 	Name       string `json:"name" orm:"null;varchar(255)"`
 	Regionlist string `json:"regionlist" orm:"null;type(text)"`
 	DRClist    string `json:"drclist" orm:"null;type(text)"`
+	Masterlist string `json:"masterlist" orm:"null;type(text)"`
 }
 
 type Region struct {
@@ -46,6 +47,12 @@ type Syncont struct {
 	Images     []models.Image    `json:"images"`
 	Layers     map[string][]byte `json:"layers"`
 }
+
+var (
+	MASTER = "master"
+	DRC    = "drc"
+	COMMON = "common"
+)
 
 func (rt *RegionTable) Get(name string) (bool, error) {
 	rt.Name = name

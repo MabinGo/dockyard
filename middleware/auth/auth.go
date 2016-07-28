@@ -110,8 +110,9 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 		return false, fmt.Errorf("invalid user name or password")
 	}
 
-	if strings.Compare(ctx.Req.RequestURI, "/syn/drc") == 0 {
-		if err := drcVerifyHandler(author); err != nil {
+	if (strings.Compare(ctx.Req.RequestURI, "/syn/drc") == 0) ||
+		(strings.Compare(ctx.Req.RequestURI, "/syn/master") == 0) {
+		if err := synVerifyHandler(author); err != nil {
 			return false, err
 		}
 
@@ -213,7 +214,7 @@ func cmdReqHandler(ctx *macaron.Context) (bool, error) {
 	return false, nil
 }
 
-func drcVerifyHandler(author string) error {
+func synVerifyHandler(author string) error {
 	url, err := url.Parse(setting.Realm)
 	if err != nil {
 		return err
