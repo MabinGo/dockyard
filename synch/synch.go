@@ -110,7 +110,7 @@ func TrigSynEndpoint(region *Region, auth string) error {
 func trig(namespace, repository, tag, auth, dest string) error {
 	sc := new(Syncont)
 	sc.Layers = make(map[string][]byte)
-	if err := FillSynContent(namespace, repository, tag, sc); err != nil {
+	if err := fillSynContent(namespace, repository, tag, sc); err != nil {
 		return err
 	}
 
@@ -238,7 +238,7 @@ func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
 	return nil
 }
 
-func FillSynContent(namespace, repository, tag string, sc *Syncont) error {
+func fillSynContent(namespace, repository, tag string, sc *Syncont) error {
 	r := new(models.Repository)
 	if exists, err := r.Get(namespace, repository); err != nil {
 		return err
@@ -629,4 +629,64 @@ func DelSynEndpoint(regiontyp string, reqbody []byte) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func IsMasterExisted() bool {
+	rt := new(RegionTable)
+	if exists, err := rt.Get(RTName); err != nil || !exists {
+		return false
+	}
+
+	if rt.Masterlist != "" {
+		return true
+	} else {
+		return false
+	}
+}
+
+func GetSynFromMaster(namespace, repository, tag, auth string) error {
+	rt := new(RegionTable)
+	if exists, err := rt.Get(RTName); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("not found region table")
+	}
+
+	if rt.Masterlist == "" {
+		return fmt.Errorf("no remote node")
+	}
+
+	eplist := new(Endpointlist)
+	if err := json.Unmarshal([]byte(rt.Masterlist), eplist); err != nil {
+		return err
+	}
+
+	var result error
+	for _, v := range eplist.Endpoints {
+		url := fmt.Sprintf("%s/syn/%s/%s/%s/content", v.URL, namespace, repository, tag)
+		resp, err := module.SendHttpRequest("GET", url, nil, auth)
+		if err != nil {
+			result = fmt.Errorf("send http request err: %v", err)
+			continue
+		} else if resp.StatusCode != http.StatusOK {
+			result = fmt.Errorf("request status: %v", resp.StatusCode)
+			continue
+		}
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			result = err
+			continue
+		}
+
+		if err := SaveSynContent(namespace, repository, tag, body); err != nil {
+			result = err
+			continue
+		}
+
+		result = nil
+		break
+	}
+
+	return result
 }

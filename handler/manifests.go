@@ -200,11 +200,24 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		result, _ := module.ReportError(module.UNKNOWN, detail)
 		return http.StatusBadRequest, result
 	} else if !exists {
-		log.Error("[REGISTRY API V2] Not found manifest %v/%v:%v", namespace, repository, tag)
+		if !synch.IsMasterExisted() {
+			log.Error("[REGISTRY API V2] Not found manifest %v/%v:%v", namespace, repository, tag)
 
-		detail := map[string]string{"Name": name, "Tag": tag}
-		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
-		return http.StatusNotFound, result
+			detail := map[string]string{"Name": name, "Tag": tag}
+			result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
+			return http.StatusNotFound, result
+		} else {
+			//*******************************************
+			auth := ctx.Req.Header.Get("Authorization")
+			if err := synch.GetSynFromMaster(namespace, repository, tag, auth); err != nil {
+				log.Error("[REGISTRY API V2] Failed to get repository from remote %v/%v:%v", namespace, repository, tag)
+
+				detail := map[string]string{"Name": name, "Tag": tag}
+				result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
+				return http.StatusNotFound, result
+			}
+			//*******************************************
+		}
 	}
 
 	digest, err := signature.DigestManifest([]byte(t.Manifest))

@@ -10,6 +10,35 @@ import (
 	"github.com/containerops/dockyard/models"
 )
 
+func GetSynContentHandler(ctx *macaron.Context) (int, []byte) {
+	var result []byte
+
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+	tag := ctx.Params(":tag")
+
+	sc := new(Syncont)
+	sc.Layers = make(map[string][]byte)
+	if err := fillSynContent(namespace, repository, tag, sc); err != nil {
+		synlog.Error("[REGISTRY API] Failed to get syn content: %s", err.Error())
+
+		result, _ = json.Marshal(map[string]string{"message": "Failed to get synchron"})
+		return http.StatusInternalServerError, result
+	}
+
+	body, err := json.Marshal(sc)
+	if err != nil {
+		synlog.Error("[REGISTRY API] Failed to fill syn content: %s", err.Error())
+
+		result, _ = json.Marshal(map[string]string{"message": "Failed to fill syn content"})
+		return http.StatusInternalServerError, result
+	}
+
+	info := fmt.Sprintf("Successed to get %s/%s:%s", namespace, repository, tag)
+	result, _ = json.Marshal(map[string]string{"message": info})
+	return http.StatusOK, body
+}
+
 func PostSynMasterHandler(ctx *macaron.Context) (int, []byte) {
 	var result []byte
 
