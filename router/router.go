@@ -175,7 +175,8 @@ func SetRouters(m *macaron.Macaron) {
 		m.Post("/drc", synch.PostSynDRCHandler)
 		m.Get("/drc", synch.GetSynDRCHandler)
 		m.Delete("/drc", synch.DelSynDRCHandler)
-		m.Put("/:namespace/:repository/:tag/content", synch.PutSynContentHandler)
-		m.Get("/:namespace/:repository/:tag/content", synch.GetSynContentHandler)
+		m.Put("/:namespace/:repository/:tag/content", synch.PutTagContHandler)
+		m.Get("/:namespace/:repository/:tag/content", synch.GetTagContHandler)
+		m.Get("/:namespace/:repository/tags/list", synch.GetTagsListHandler)
 	})
 }

@@ -653,7 +653,7 @@ func GetSynFromMaster(namespace, repository, tag, auth string) error {
 	}
 
 	if rt.Masterlist == "" {
-		return fmt.Errorf("no remote node")
+		return fmt.Errorf("no remote endpoint")
 	}
 
 	eplist := new(Endpointlist)
@@ -661,32 +661,68 @@ func GetSynFromMaster(namespace, repository, tag, auth string) error {
 		return err
 	}
 
-	var result error
 	for _, v := range eplist.Endpoints {
 		url := fmt.Sprintf("%s/syn/%s/%s/%s/content", v.URL, namespace, repository, tag)
 		resp, err := module.SendHttpRequest("GET", url, nil, auth)
 		if err != nil {
-			result = fmt.Errorf("send http request err: %v", err)
 			continue
 		} else if resp.StatusCode != http.StatusOK {
-			result = fmt.Errorf("request status: %v", resp.StatusCode)
 			continue
 		}
 
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			result = err
 			continue
 		}
 
 		if err := SaveSynContent(namespace, repository, tag, body); err != nil {
-			result = err
 			continue
 		}
 
-		result = nil
-		break
+		return nil
 	}
 
-	return result
+	return fmt.Errorf("bad remote endpoint")
+}
+
+func GetTaglistFromMaster(namespace, repository, auth string) ([]string, error) {
+	rt := new(RegionTable)
+	if exists, err := rt.Get(RTName); err != nil {
+		return []string{}, err
+	} else if !exists {
+		return []string{}, fmt.Errorf("not found region table")
+	}
+
+	if rt.Masterlist == "" {
+		return []string{}, fmt.Errorf("no remote endpoint")
+	}
+
+	eplist := new(Endpointlist)
+	if err := json.Unmarshal([]byte(rt.Masterlist), eplist); err != nil {
+		return []string{}, err
+	}
+
+	for _, v := range eplist.Endpoints {
+		url := fmt.Sprintf("%s/syn/%s/%s/tags/list", v.URL, namespace, repository)
+		resp, err := module.SendHttpRequest("GET", url, nil, auth)
+		if err != nil {
+			continue
+		} else if resp.StatusCode != http.StatusOK {
+			continue
+		}
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			continue
+		}
+
+		var tags = []string{}
+		if err := json.Unmarshal(body, &tags); err != nil {
+			return []string{}, err
+		}
+
+		return tags, nil
+	}
+
+	return []string{}, fmt.Errorf("bad remote endpoint")
 }

@@ -150,20 +150,41 @@ func GetTagsListV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 		name = namespace + "/" + repository
 	}
 
+	var tagslist []string
 	r := new(models.Repository)
-	if _, err := r.Get(namespace, repository); err != nil {
+	if exists, err := r.Get(namespace, repository); err != nil {
 		log.Error("[REGISTRY API V2] Failed to get repository %v/%v: %v", namespace, repository, err.Error())
 
 		detail := map[string]string{"Name": name}
 		result, _ := module.ReportError(module.TAG_INVALID, detail)
 		return http.StatusBadRequest, result
+	} else if !exists {
+		if !synch.IsMasterExisted() {
+			log.Error("[REGISTRY API V2] Not found repository %v", name)
+
+			detail := map[string]string{"name": name}
+			result, _ := module.ReportError(module.NAME_UNKNOWN, detail)
+			return http.StatusNotFound, result
+		} else {
+			auth := ctx.Req.Header.Get("Authorization")
+			tags, err := synch.GetTaglistFromMaster(namespace, repository, auth)
+			if err != nil {
+				log.Error("[REGISTRY API V2] Not found tag list from remote %v", err.Error())
+
+				detail := map[string]string{"Name": name}
+				result, _ := module.ReportError(module.NAME_UNKNOWN, detail)
+				return http.StatusNotFound, result
+			}
+			tagslist = tags
+		}
+	} else {
+		tagslist = r.GetTagslist()
 	}
 
 	data := map[string]interface{}{}
 
 	data["name"] = fmt.Sprintf("%s/%s", namespace, repository)
 
-	tagslist := r.GetTagslist()
 	if len(tagslist) <= 0 {
 		log.Error("[REGISTRY API V2] Repository %v/%v tags not found", namespace, repository)
 
@@ -207,16 +228,28 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 			result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
 			return http.StatusNotFound, result
 		} else {
-			//*******************************************
 			auth := ctx.Req.Header.Get("Authorization")
 			if err := synch.GetSynFromMaster(namespace, repository, tag, auth); err != nil {
-				log.Error("[REGISTRY API V2] Failed to get repository from remote %v/%v:%v", namespace, repository, tag)
+				log.Error("[REGISTRY API V2] Failed to get repository from remote %v", err.Error())
 
 				detail := map[string]string{"Name": name, "Tag": tag}
 				result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
 				return http.StatusNotFound, result
 			}
-			//*******************************************
+
+			if exists, err := t.Get(namespace, repository, tag); err != nil {
+				log.Error("[REGISTRY API V2] Failed to get manifest from remote: %v", err.Error())
+
+				detail := map[string]string{"Name": name, "Tag": tag}
+				result, _ := module.ReportError(module.UNKNOWN, detail)
+				return http.StatusBadRequest, result
+			} else if !exists {
+				log.Error("[REGISTRY API V2] Not found manifest from remote %v/%v:%v", namespace, repository, tag)
+
+				detail := map[string]string{"Name": name, "Tag": tag}
+				result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
+				return http.StatusNotFound, result
+			}
 		}
 	}
 

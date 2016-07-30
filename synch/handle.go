@@ -10,35 +10,6 @@ import (
 	"github.com/containerops/dockyard/models"
 )
 
-func GetSynContentHandler(ctx *macaron.Context) (int, []byte) {
-	var result []byte
-
-	namespace := ctx.Params(":namespace")
-	repository := ctx.Params(":repository")
-	tag := ctx.Params(":tag")
-
-	sc := new(Syncont)
-	sc.Layers = make(map[string][]byte)
-	if err := fillSynContent(namespace, repository, tag, sc); err != nil {
-		synlog.Error("[REGISTRY API] Failed to get syn content: %s", err.Error())
-
-		result, _ = json.Marshal(map[string]string{"message": "Failed to get synchron"})
-		return http.StatusInternalServerError, result
-	}
-
-	body, err := json.Marshal(sc)
-	if err != nil {
-		synlog.Error("[REGISTRY API] Failed to fill syn content: %s", err.Error())
-
-		result, _ = json.Marshal(map[string]string{"message": "Failed to fill syn content"})
-		return http.StatusInternalServerError, result
-	}
-
-	info := fmt.Sprintf("Successed to get %s/%s:%s", namespace, repository, tag)
-	result, _ = json.Marshal(map[string]string{"message": info})
-	return http.StatusOK, body
-}
-
 func PostSynMasterHandler(ctx *macaron.Context) (int, []byte) {
 	var result []byte
 
@@ -64,7 +35,7 @@ func GetSynMasterHandler(ctx *macaron.Context) (int, []byte) {
 		result, _ = json.Marshal(map[string]string{"message": "Failed to get master list"})
 		return http.StatusInternalServerError, result
 	} else if drclist == "" {
-		synlog.Error("[REGISTRY API] Failed to get master list: No endpoint in the master region")
+		synlog.Error("[REGISTRY API] No endpoint in the master region")
 
 		result, _ = json.Marshal(map[string]string{"message": "No endpoint in the master region"})
 		return http.StatusNotFound, result
@@ -177,7 +148,7 @@ func PostSynTrigHandler(ctx *macaron.Context) (int, []byte) {
 	return http.StatusOK, result
 }
 
-func PutSynContentHandler(ctx *macaron.Context) (int, []byte) {
+func PutTagContHandler(ctx *macaron.Context) (int, []byte) {
 	var result []byte
 
 	namespace := ctx.Params(":namespace")
@@ -207,7 +178,7 @@ func GetSynDRCHandler(ctx *macaron.Context) (int, []byte) {
 		result, _ = json.Marshal(map[string]string{"message": "Failed to get DRC list"})
 		return http.StatusInternalServerError, result
 	} else if drclist == "" {
-		synlog.Error("[REGISTRY API] Failed to get DRC list: No endpoint in the DRC region")
+		synlog.Error("[REGISTRY API] No endpoint in the DRC region")
 
 		result, _ = json.Marshal(map[string]string{"message": "No endpoint in the DRC region"})
 		return http.StatusNotFound, result
@@ -237,6 +208,64 @@ func GetSynRegionHandler(ctx *macaron.Context) (int, []byte) {
 	}
 
 	return http.StatusOK, []byte(eplist)
+}
+
+func GetTagContHandler(ctx *macaron.Context) (int, []byte) {
+	var result []byte
+
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+	tag := ctx.Params(":tag")
+
+	sc := new(Syncont)
+	sc.Layers = make(map[string][]byte)
+	if err := fillSynContent(namespace, repository, tag, sc); err != nil {
+		synlog.Error("[REGISTRY API] Failed to get syn content: %s", err.Error())
+
+		result, _ = json.Marshal(map[string]string{"message": "Failed to get synchron"})
+		return http.StatusInternalServerError, result
+	}
+
+	body, err := json.Marshal(sc)
+	if err != nil {
+		synlog.Error("[REGISTRY API] Failed to fill syn content: %s", err.Error())
+
+		result, _ = json.Marshal(map[string]string{"message": "Failed to fill syn content"})
+		return http.StatusInternalServerError, result
+	}
+
+	return http.StatusOK, body
+}
+
+func GetTagsListHandler(ctx *macaron.Context) (int, []byte) {
+	var result []byte
+
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+
+	r := new(models.Repository)
+	if exists, err := r.Get(namespace, repository); err != nil {
+		synlog.Error("[REGISTRY API] Failed to get repository %v/%v: %v", namespace, repository, err.Error())
+
+		result, _ := json.Marshal(map[string]string{"message": "Failed to get tag list"})
+		return http.StatusBadRequest, result
+	} else if !exists {
+		synlog.Error("[REGISTRY API] Not found repository %v/%v", namespace, repository)
+
+		result, _ := json.Marshal(map[string]string{"message": "Not found repository"})
+		return http.StatusNotFound, result
+	}
+
+	tagslist := r.GetTagslist()
+	body, err := json.Marshal(tagslist)
+	if err != nil {
+		synlog.Error("[REGISTRY API] Failed to get tagslist from remote : %s", err.Error())
+
+		result, _ = json.Marshal(map[string]string{"message": "Failed to get tags list from remote"})
+		return http.StatusInternalServerError, result
+	}
+
+	return http.StatusOK, body
 }
 
 func DelSynRegionHandler(ctx *macaron.Context) (int, []byte) {
