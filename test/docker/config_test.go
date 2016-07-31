@@ -1,15 +1,10 @@
 package docker
 
 import (
-	"crypto/tls"
-	"encoding/json"
-	"net/http"
 	"os/exec"
-	"strings"
 	"testing"
 
 	"github.com/astaxie/beego/config"
-	"github.com/containerops/dockyard/utils/setting"
 )
 
 var (

@@ -15,12 +15,6 @@ import (
 )
 
 func TestCacheInit(t *testing.T) {
-	if setting.Authmode == "token" {
-		cmd := exec.Command("sudo", DockerBinary, "login", "-u", user.Name, "-p", user.Password, "-e", user.Email, Domains)
-		if err := cmd.Run(); err != nil {
-			t.Fatalf("Docker login faild: [Error]%v", err)
-		}
-	}
 	repoBase := "busybox:latest"
 	repoDest := Domains + "/" + UserName + "/" + repoBase
 
@@ -49,10 +43,6 @@ func TestCache(t *testing.T) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		t.Error(err)
-	}
-
-	if setting.Authmode == "token" {
-		req.SetBasicAuth(user.Name, user.Password)
 	}
 
 	tr := &http.Transport{

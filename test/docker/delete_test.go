@@ -24,12 +24,6 @@ var (
 )
 
 func TestDeleteInit(t *testing.T) {
-	if setting.Authmode == "token" {
-		cmd := exec.Command("sudo", DockerBinary, "login", "-u", user.Name, "-p", user.Password, "-e", user.Email, Domains)
-		if err := cmd.Run(); err != nil {
-			t.Fatalf("Docker login faild: [Error]%v", err)
-		}
-	}
 	for i := 0; i < 3; i++ {
 		repoDests[i] = UserName + "/" + repoName + ":" + repoTags[i]
 	}
@@ -148,10 +142,6 @@ func methodHttp(url, meth string, t *testing.T) []byte {
 	req, err := http.NewRequest(meth, url, nil)
 	if err != nil {
 		t.Error(err)
-	}
-
-	if setting.Authmode == "token" {
-		req.SetBasicAuth(user.Name, user.Password)
 	}
 
 	tr := &http.Transport{
