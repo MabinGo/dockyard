@@ -65,12 +65,21 @@ func PostBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 	}
 
 	if name != from && from != "" && mount != "" {
-		random := fmt.Sprintf("%s://%s/v2/%s/blobs/%s", u.Scheme, u.Host, name, mount)
-		ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		ctx.Resp.Header().Set("Docker-Content-Digest", mount)
-		ctx.Resp.Header().Set("Location", random)
+		tarsum := strings.Split(mount, ":")[1]
+		i := new(models.Image)
+		if exists, err := i.Get(tarsum); err != nil {
+			log.Error("[REGISTRY API V2] Failed to get blob " + tarsum + ": " + err.Error())
 
-		return http.StatusCreated, []byte("")
+			result, _ := module.ReportError(module.UNKNOWN, err.Error())
+			return http.StatusInternalServerError, result
+		} else if exists {
+			random := fmt.Sprintf("%s://%s/v2/%s/blobs/%s", u.Scheme, u.Host, name, mount)
+			ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			ctx.Resp.Header().Set("Docker-Content-Digest", mount)
+			ctx.Resp.Header().Set("Location", random)
+
+			return http.StatusCreated, []byte("")
+		}
 	}
 
 	uuid := utils.MD5(uuid.NewV4().String())

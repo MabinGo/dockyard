@@ -156,7 +156,7 @@ func GetTagsListV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 		log.Error("[REGISTRY API V2] Failed to get repository %v/%v: %v", namespace, repository, err.Error())
 
 		detail := map[string]string{"Name": name}
-		result, _ := module.ReportError(module.TAG_INVALID, detail)
+		result, _ := module.ReportError(module.UNKNOWN, detail)
 		return http.StatusBadRequest, result
 	} else if !exists {
 		if !synch.IsMasterExisted() {
@@ -169,10 +169,10 @@ func GetTagsListV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 			auth := ctx.Req.Header.Get("Authorization")
 			tags, err := synch.GetTaglistFromMaster(namespace, repository, auth)
 			if err != nil {
-				log.Error("[REGISTRY API V2] Not found tag list from remote %v", err.Error())
+				log.Error("[REGISTRY API V2] Not found tag list from remotion endpoint %v", err.Error())
 
 				detail := map[string]string{"Name": name}
-				result, _ := module.ReportError(module.NAME_UNKNOWN, detail)
+				result, _ := module.ReportError(module.TAG_INVALID, detail)
 				return http.StatusNotFound, result
 			}
 			tagslist = tags
@@ -230,7 +230,7 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 		} else {
 			auth := ctx.Req.Header.Get("Authorization")
 			if err := synch.GetSynFromMaster(namespace, repository, tag, auth); err != nil {
-				log.Error("[REGISTRY API V2] Failed to get repository from remote %v", err.Error())
+				log.Error("[REGISTRY API V2] Failed to get repository from remotion endpoint %v", err.Error())
 
 				detail := map[string]string{"Name": name, "Tag": tag}
 				result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)
@@ -238,13 +238,13 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 			}
 
 			if exists, err := t.Get(namespace, repository, tag); err != nil {
-				log.Error("[REGISTRY API V2] Failed to get manifest from remote: %v", err.Error())
+				log.Error("[REGISTRY API V2] Failed to get manifest: %v", err.Error())
 
 				detail := map[string]string{"Name": name, "Tag": tag}
 				result, _ := module.ReportError(module.UNKNOWN, detail)
 				return http.StatusBadRequest, result
 			} else if !exists {
-				log.Error("[REGISTRY API V2] Not found manifest from remote %v/%v:%v", namespace, repository, tag)
+				log.Error("[REGISTRY API V2] Not found manifest %v/%v:%v", namespace, repository, tag)
 
 				detail := map[string]string{"Name": name, "Tag": tag}
 				result, _ := module.ReportError(module.MANIFEST_UNKNOWN, detail)

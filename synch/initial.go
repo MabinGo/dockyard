@@ -12,6 +12,7 @@ import (
 )
 
 var synlog *logs.BeeLogger
+var isStartup = false
 
 func InitSynchron() error {
 	rt := new(RegionTable)
@@ -53,7 +54,7 @@ func InitSynchron() error {
 						//create goroutine to distributed images at set intervals
 						for _, r := range rlist.Regions {
 							//TODO: repeat while timeout
-							TrigSynEndpoint(&r, authorization)
+							trigRegionEndpoint(&r, authorization)
 						}
 					} else {
 
@@ -62,6 +63,8 @@ func InitSynchron() error {
 			}
 		}()
 	}
+
+	isStartup = true
 
 	return nil
 }

@@ -74,7 +74,7 @@ func GetRepositoryImagesV1Handler(ctx *macaron.Context, log *logs.BeeLogger) (in
 
 		result, _ := json.Marshal(map[string]string{"message": "Failed to get repository context"})
 		return http.StatusBadRequest, result
-	} else if exists == false {
+	} else if !exists || r.Version == setting.APIVERSION_V2 {
 		log.Error("[REGISTRY API V1] Not found repository %v/%v", namespace, repository)
 
 		result, _ := json.Marshal(map[string]string{"message": "Not found repository"})

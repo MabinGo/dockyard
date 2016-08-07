@@ -10,8 +10,6 @@ import (
 	"github.com/codegangsta/cli"
 	"gopkg.in/macaron.v1"
 
-	"github.com/containerops/dockyard/auth/authn"
-	"github.com/containerops/dockyard/auth/authz"
 	"github.com/containerops/dockyard/utils"
 	"github.com/containerops/dockyard/utils/setting"
 	"github.com/containerops/dockyard/web"
@@ -41,18 +39,6 @@ func runWeb(c *cli.Context) {
 
 	//Set Macaron Web Middleware And Routers
 	web.SetDockyardMacaron(m)
-
-	//start authn
-	var err error
-	authn.Authn, err = authn.NewAuthenticator()
-	if err != nil {
-		fmt.Printf("New Authenticator error: %s\n", err.Error())
-	}
-	//start authz
-	authz.Authz, err = authz.NewAuthorizer()
-	if err != nil {
-		fmt.Printf("New Authorizer error: %s\n", err.Error())
-	}
 
 	switch setting.ListenMode {
 	case "http":

@@ -109,7 +109,7 @@ func ParseManifest(data []byte, namespace, repository, tag string) (error, int64
 			}
 			i["id"] = image["id"].(string)
 
-			if err := r.PutJSONFromManifests(i, namespace, repository); err != nil {
+			if err := r.PutJSONFromManifests(i, namespace, repository, setting.APIVERSION_V2); err != nil {
 				return err, 0
 			}
 

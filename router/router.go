@@ -3,7 +3,6 @@ package router
 import (
 	"gopkg.in/macaron.v1"
 
-	"github.com/containerops/dockyard/auth/controller"
 	"github.com/containerops/dockyard/handler"
 	"github.com/containerops/dockyard/oss"
 	"github.com/containerops/dockyard/oss/apiserver"
@@ -95,88 +94,29 @@ func SetRouters(m *macaron.Macaron) {
 		})
 	})
 
-	m.Group("/uam", func() {
-		//Authorization service
-		m.Get("/auth", controller.GetAuthorize)
-		m.Delete("/auth", controller.DeleteAuthorize)
-		m.Post("/auth", controller.PostAuthorize)
-
-		//user
-		m.Group("/user", func() {
-			m.Post("/signup", controller.SignUp)
-			m.Get("/signin", controller.SignIn)
-			m.Put("/update", controller.UpdateUser)
-			m.Post("/add", controller.CreateUser)
-			m.Get("/list", controller.GetUserList)
-			m.Delete("/:user", controller.DeleteUser)
-			m.Delete("/deactive/:user", controller.DeactiveUser)
-			m.Put("/active/:user", controller.ActiveUser)
-		})
-
-		//repository
-		m.Group("/repository", func() {
-			m.Post("/", controller.CreateRepository)
-			m.Delete("/:namespace/:repository", controller.DeleteRepository)
-			m.Delete("/deactive/:namespace/:repository", controller.DeactiveRepository)
-			m.Put("/active/:namespace/:repository", controller.ActiveRepository)
-			m.Put("/update", controller.UpdateRepository)
-			m.Get("/:namespace/list", controller.GetRepositoryList)
-			m.Get("/:repository/fuzzylist", controller.GetFuzzyRepositoryList)
-		})
-
-		//organization
-		m.Group("/organization", func() {
-			m.Post("/", controller.CreateOrganization)
-			m.Delete("/:organization", controller.DeleteOrganization)
-			m.Delete("/deactive/:organization", controller.DeactiveOrganization)
-			m.Put("/active/:organization", controller.ActiveOrganization)
-			m.Post("/adduser/", controller.AddUserToOrganization)
-			m.Delete("/removeuser/:organization/:user", controller.RemoveUserFromOrganization)
-			m.Delete("/deactiveuser/:organization/:user", controller.DeactiveUserFromOrganization)
-			m.Put("/activeuser/:organization/:user", controller.ActiveUserFromOrganization)
-			m.Put("/update", controller.UpdateOrganization)
-			m.Put("/updateorganizationusermap", controller.UpdateOrganizationUserMap)
-			m.Get("/list", controller.GetOrganizationList)
-			m.Get("/:organization/listuser", controller.GetUserListFromOrganization)
-		})
-
-		//team
-		m.Group("/team", func() {
-			m.Post("/", controller.CreateTeam)
-			m.Delete("/:organization/:team", controller.DeleteTeam)
-			m.Delete("/deactive/:organization/:team", controller.DeactiveTeam)
-			m.Put("/active/:organization/:team", controller.ActiveTeam)
-			m.Post("/adduser/", controller.AddUserToTeam)
-			m.Delete("/removeuser/:organization/:team/:user", controller.RemoveUserFromTeam)
-			m.Delete("/deactiveuser/:organization/:team/:user", controller.DeactiveUserFromTeam)
-			m.Put("/activeuser/:organization/:team/:user", controller.ActiveUserFromTeam)
-			m.Post("/addrepository/", controller.AddRepositoryToTeam)
-			m.Delete("/removerepository/:organization/:team/:repository", controller.RemoveRepositoryFromTeam)
-			m.Delete("/deactiverepository/:organization/:team/:repository", controller.DeactiveRepositoryFromTeam)
-			m.Put("/activerepository/:organization/:team/:repository", controller.ActiveRepositoryFromTeam)
-			m.Put("/update", controller.UpdateTeam)
-			m.Put("/updateteamusermap", controller.UpdateTeamUserMap)
-			m.Put("/updateteamrepositorymap", controller.UpdateTeamRepositoryMap)
-			m.Get("/:organization/listteam", controller.GetTeamListFromOrganization)
-			m.Get("/:organization/:team/listuser", controller.GetUserListFromTeam)
-			m.Get("/:organization/:team/listrepository", controller.GetRepositoryListFromTeam)
-		})
-	})
-
-	//images synchron distributed
+	//images synchron
 	m.Group("/syn", func() {
+		//region
 		m.Post("/:namespace/:repository/:tag/region", synch.PostSynRegionHandler)
 		m.Post("/:namespace/:repository/:tag/trigger", synch.PostSynTrigHandler)
 		m.Get("/:namespace/:repository/:tag/region", synch.GetSynRegionHandler)
 		m.Delete("/:namespace/:repository/:tag/region", synch.DelSynRegionHandler)
+
+		//master contains all images
 		m.Post("/master", synch.PostSynMasterHandler)
 		m.Get("/master", synch.GetSynMasterHandler)
 		m.Delete("/master", synch.DelSynMasterHandler)
+
+		//disaster recovery center
 		m.Post("/drc", synch.PostSynDRCHandler)
 		m.Get("/drc", synch.GetSynDRCHandler)
 		m.Delete("/drc", synch.DelSynDRCHandler)
-		m.Put("/:namespace/:repository/:tag/content", synch.PutTagContHandler)
-		m.Get("/:namespace/:repository/:tag/content", synch.GetTagContHandler)
+
+		//common
+		m.Put("/:namespace/:repository/:tag/content", synch.PutSynContHandler)
+		m.Get("/:namespace/:repository/:tag/content", synch.GetSynContHandler)
+
+		//support situation like docker pull -a namespace/repository
 		m.Get("/:namespace/:repository/tags/list", synch.GetTagsListHandler)
 	})
 }

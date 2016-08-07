@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/containerops/dockyard/utils/db"
-	"github.com/containerops/dockyard/utils/setting"
 )
 
 type Repository struct {
@@ -27,7 +26,7 @@ type Repository struct {
 
 func (r *Repository) TableUnique() [][]string {
 	return [][]string{
-		[]string{"Namespace", "Repository"},
+		{"Namespace", "Repository"},
 	}
 }
 
@@ -85,7 +84,7 @@ func (r *Repository) SaveTagslist(tagslist []string) string {
 	return strings.Join(tagslist, ",")
 }
 
-func (r *Repository) PutJSONFromManifests(image map[string]string, namespace, repository string) error {
+func (r *Repository) PutJSONFromManifests(image map[string]string, namespace, repository string, version int64) error {
 	if exists, err := r.Get(namespace, repository); err != nil {
 		return err
 	} else if exists == false {
@@ -94,7 +93,7 @@ func (r *Repository) PutJSONFromManifests(image map[string]string, namespace, re
 
 	r.Namespace = namespace
 	r.Repository = repository
-	r.Version = setting.APIVERSION_V2
+	r.Version = version
 	r.Size = 0
 	r.Download = 0
 

@@ -59,7 +59,7 @@ func TrigSynDRC(namespace, repository, tag, auth string) error {
 	return nil
 }
 
-func TrigSynEndpoint(region *Region, auth string) error {
+func trigRegionEndpoint(region *Region, auth string) error {
 	eplist := new(Endpointlist)
 	if err := json.Unmarshal([]byte(region.Endpointlist), eplist); err != nil {
 		return err
@@ -132,7 +132,7 @@ func trig(namespace, repository, tag, auth, dest string) error {
 }
 
 //TODO: must consider parallel, push/pull during synchron
-func SaveSynContent(namespace, repository, tag string, reqbody []byte) error {
+func saveSynContent(namespace, repository, tag string, reqbody []byte) error {
 	sc := new(Syncont)
 	sc.Layers = make(map[string][]byte)
 	if err := json.Unmarshal(reqbody, sc); err != nil {
@@ -281,7 +281,7 @@ func fillSynContent(namespace, repository, tag string, sc *Syncont) error {
 	return nil
 }
 
-func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error {
+func saveRegionEndpoint(namespace, repository, tag string, reqbody []byte) error {
 	eplist := new(Endpointlist)
 	if err := json.Unmarshal(reqbody, eplist); err != nil {
 		return err
@@ -330,7 +330,7 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 
 	//TODO: mutex
 	if setting.SynMode != "" {
-		if err := UpdateRegionList(regionIn); err != nil {
+		if err := updateRegionList(regionIn); err != nil {
 			return err
 		}
 	}
@@ -338,7 +338,7 @@ func SaveRegionContent(namespace, repository, tag string, reqbody []byte) error 
 	return nil
 }
 
-func SaveContent(regiontyp string, reqbody []byte) error {
+func saveEndpoint(regiontyp string, reqbody []byte) error {
 	eplistIn := new(Endpointlist)
 	if err := json.Unmarshal(reqbody, eplistIn); err != nil {
 		return err
@@ -412,7 +412,7 @@ func SaveContent(regiontyp string, reqbody []byte) error {
 	return nil
 }
 
-func UpdateRegionList(regionIn *Region) error {
+func updateRegionList(regionIn *Region) error {
 	rt := new(RegionTable)
 	if exists, err := rt.Get(RTName); err != nil {
 		return err
@@ -454,7 +454,7 @@ func UpdateRegionList(regionIn *Region) error {
 	return nil
 }
 
-func GetSynList(regiontyp string) (string, error) {
+func getSynList(regiontyp string) (string, error) {
 	rt := new(RegionTable)
 	if exists, err := rt.Get(RTName); err != nil {
 		return "", err
@@ -472,7 +472,7 @@ func GetSynList(regiontyp string) (string, error) {
 	return list, nil
 }
 
-func GetSynRegionEndpoint(namespace, repository, tag string) (string, error) {
+func getRegionEndpoint(namespace, repository, tag string) (string, error) {
 	r := new(Region)
 	if exists, err := r.Get(namespace, repository, tag); err != nil {
 		return "", err
@@ -483,7 +483,7 @@ func GetSynRegionEndpoint(namespace, repository, tag string) (string, error) {
 	return r.Endpointlist, nil
 }
 
-func DelSynRegion(namespace, repository, tag string, reqbody []byte) (bool, error) {
+func delRegionEndpoint(namespace, repository, tag string, reqbody []byte) (bool, error) {
 	eplistIn := new(Endpointlist)
 	if err := json.Unmarshal(reqbody, eplistIn); err != nil {
 		return false, err
@@ -541,7 +541,7 @@ func DelSynRegion(namespace, repository, tag string, reqbody []byte) (bool, erro
 
 	//TODO: mutex
 	if setting.SynMode != "" {
-		if err := UpdateRegionList(r); err != nil {
+		if err := updateRegionList(r); err != nil {
 			return false, err
 		}
 	}
@@ -549,7 +549,7 @@ func DelSynRegion(namespace, repository, tag string, reqbody []byte) (bool, erro
 	return true, nil
 }
 
-func DelSynEndpoint(regiontyp string, reqbody []byte) (bool, error) {
+func delEndpoint(regiontyp string, reqbody []byte) (bool, error) {
 	eplistIn := new(Endpointlist)
 	if err := json.Unmarshal(reqbody, eplistIn); err != nil {
 		return false, err
@@ -632,16 +632,7 @@ func DelSynEndpoint(regiontyp string, reqbody []byte) (bool, error) {
 }
 
 func IsMasterExisted() bool {
-	rt := new(RegionTable)
-	if exists, err := rt.Get(RTName); err != nil || !exists {
-		return false
-	}
-
-	if rt.Masterlist != "" {
-		return true
-	} else {
-		return false
-	}
+	return isStartup
 }
 
 func GetSynFromMaster(namespace, repository, tag, auth string) error {
@@ -675,7 +666,7 @@ func GetSynFromMaster(namespace, repository, tag, auth string) error {
 			continue
 		}
 
-		if err := SaveSynContent(namespace, repository, tag, body); err != nil {
+		if err := saveSynContent(namespace, repository, tag, body); err != nil {
 			continue
 		}
 

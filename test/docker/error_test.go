@@ -106,7 +106,7 @@ func TestDeleteError(t *testing.T) {
 		t.Fatalf("Get manifest failed: [Error]%v", err)
 	}
 	ret := false
-	for k, _ := range mnf {
+	for k := range mnf {
 		if k == "schemaVersion" {
 			ret = true
 			break
@@ -197,7 +197,7 @@ func TestTaglistError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Get taglist failed: [Info]%v, [Error]%v", out, err)
 		}
-		if strings.Contains(string(out), "TAG_INVALID") == false {
+		if !strings.Contains(string(out), "TAG_INVALID") && !strings.Contains(string(out), "NAME_UNKNOWN") {
 			t.Fatalf("Get taglist failed: [Info]%v", string(out))
 		}
 	} else {

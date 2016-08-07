@@ -6,7 +6,6 @@ import (
 
 	"gopkg.in/macaron.v1"
 
-	"github.com/containerops/dockyard/auth/dao"
 	"github.com/containerops/dockyard/backend"
 	"github.com/containerops/dockyard/middleware"
 	"github.com/containerops/dockyard/models"
@@ -23,9 +22,6 @@ func SetDockyardMacaron(m *macaron.Macaron) {
 	} else {
 		db.Drv.RegisterModel(new(models.Tag), new(models.Image), new(models.Repository))
 
-		db.Drv.RegisterModel(new(dao.Organization), new(dao.User), new(dao.OrganizationUserMap),
-			new(dao.RepositoryEx), new(dao.Team), new(dao.TeamRepositoryMap), new(dao.TeamUserMap))
-
 		db.Drv.RegisterModel(new(synch.Region), new(synch.RegionTable))
 
 		if err := db.Drv.InitDB(
@@ -36,10 +32,6 @@ func SetDockyardMacaron(m *macaron.Macaron) {
 			setting.DBName,
 			setting.DBDB); err != nil {
 			fmt.Printf("Connect database error: %s\n", err.Error())
-		}
-
-		if err := dao.InitDAO(); err != nil {
-			fmt.Printf("Init database access object error: %s\n", err.Error())
 		}
 	}
 
