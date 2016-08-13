@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -8,13 +9,20 @@ import (
 	"testing"
 
 	"github.com/containerops/dockyard/utils/setting"
-	"github.com/containerops/dockyard/utils/signature"
 )
+
+var digest string
 
 func TestErrorInit(t *testing.T) {
 	repoBase := "busybox:latest"
 	repoDest := Domains + "/" + UserName + "/" + repoBase
 
+	if setting.Authmode == "token" {
+		cmd := exec.Command(DockerBinary, "login", "-u", user.Name, "-p", user.Password, "-e", user.Email, Domains)
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("Docker login faild: [Error]%v", err)
+		}
+	}
 	if err := exec.Command("sudo", DockerBinary, "inspect", repoBase).Run(); err != nil {
 		cmd := exec.Command(DockerBinary, "pull", repoBase)
 		if out, err := ParseCmdCtx(cmd); err != nil {
@@ -28,6 +36,9 @@ func TestErrorInit(t *testing.T) {
 	cmd = exec.Command("sudo", DockerBinary, "push", repoDest)
 	if out, err := ParseCmdCtx(cmd); err != nil {
 		t.Fatalf("Pull testing preparation is failed: [Info]%v, [Error]%v", out, err)
+	} else {
+		sha := strings.Split(out, "sha:256")[1]
+		digest = "sha256:" + strings.Split(sha, " ")[0]
 	}
 
 }
@@ -36,19 +47,33 @@ func TestDeleteError(t *testing.T) {
 	repoName := "busybox"
 	tag := "latest"
 
+	var encodstr string
+	var basecode string
+	var authorization string
+	if setting.Authmode == "token" {
+		encodstr = user.Name + ":" + user.Password
+		basecode = base64.StdEncoding.EncodeToString([]byte(encodstr))
+		authorization = "Authorization: Basic " + basecode
+	}
 	url := fmt.Sprintf("%v://%v/v2/%v/%v/manifests/%v", setting.ListenMode, Domains, UserName, repoName, tag)
 	var digest string
 	var output []byte
 	var out []byte
 	var err error
-
-	output, err = exec.Command("sudo", "curl", "-X", "GET", url).Output()
+	if setting.Authmode == "token" {
+		output, err = exec.Command("sudo", "curl", "-H", authorization, "-X", "GET", url).Output()
+	} else {
+		output, err = exec.Command("sudo", "curl", "-X", "GET", url).Output()
+	}
 	if err != nil {
 		t.Fatalf("Get manifest failed: [Info]%v, [Error]%v", output, err)
 	}
-	digest, err = signature.DigestManifest(output)
 	url = fmt.Sprintf("%v://%v/v2/%v/%v/manifests/%v", setting.ListenMode, Domains, UserName, repoName, "no")
-	out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
+	if setting.Authmode == "token" {
+		out, err = exec.Command("sudo", "curl", "-H", authorization, "-X", "DELETE", url).Output()
+	} else {
+		out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
+	}
 	if err != nil {
 		t.Fatalf("Delete tag failed: [Info]%v, [Error]%v", out, err)
 	}
@@ -56,7 +81,11 @@ func TestDeleteError(t *testing.T) {
 		t.Fatalf("Delete manifest failed: [Info]%v", string(out))
 	}
 	url = fmt.Sprintf("%v://%v/v2/%v/%v/manifests/%v", setting.ListenMode, Domains, UserName, repoName, digest)
-	out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
+	if setting.Authmode == "token" {
+		out, err = exec.Command("sudo", "curl", "-H", authorization, "-X", "DELETE", url).Output()
+	} else {
+		out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
+	}
 	if err != nil {
 		t.Fatalf("Delete tag failed: [Info]%v, [Error]%v", out, err)
 	}
@@ -65,12 +94,14 @@ func TestDeleteError(t *testing.T) {
 	}
 
 	url = fmt.Sprintf("%v://%v/v2/%v/%v/manifests/%v", setting.ListenMode, Domains, UserName, repoName, digest)
-	out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
-	if err != nil {
-		t.Fatalf("Delete tag failed: [Info]%v, [Error]%v", out, err)
-	}
-	if strings.Contains(string(out), "MANIFEST_UNKNOWN") == false {
-		t.Fatalf("Delete manifest failed: [Info]%v", string(out))
+	if setting.Authmode != "token" {
+		out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
+		if err != nil {
+			t.Fatalf("Delete tag failed: [Info]%v, [Error]%v", out, err)
+		}
+		if strings.Contains(string(out), "MANIFEST_UNKNOWN") == false {
+			t.Fatalf("Delete manifest failed: [Info]%v", string(out))
+		}
 	}
 
 	var mnf map[string]interface{}
@@ -95,7 +126,11 @@ func TestDeleteError(t *testing.T) {
 	for k := len(mnf[section].([]interface{})) - 1; k >= 0; k-- {
 		sha := mnf[section].([]interface{})[k].(map[string]interface{})[item].(string)
 		url := fmt.Sprintf("%v://%v/v2/%v/%v/blobs/%v", setting.ListenMode, Domains, UserName, repoName, sha)
-		out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
+		if setting.Authmode == "token" {
+			out, err = exec.Command("sudo", "curl", "-H", authorization, "-X", "DELETE", url).Output()
+		} else {
+			out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
+		}
 
 		if err != nil {
 			t.Fatalf("Delete tag failed: [Info]%v, [Error]%v", out, err)
@@ -105,8 +140,11 @@ func TestDeleteError(t *testing.T) {
 		}
 
 		url = fmt.Sprintf("%v://%v/v2/%v/%v/blobs/test", setting.ListenMode, Domains, UserName, repoName)
-		out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
-
+		if setting.Authmode == "token" {
+			out, err = exec.Command("sudo", "curl", "-H", authorization, "-X", "DELETE", url).Output()
+		} else {
+			out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
+		}
 		if err != nil {
 			t.Fatalf("Delete tag failed: [Info]%v, [Error]%v", out, err)
 		}
@@ -118,8 +156,11 @@ func TestDeleteError(t *testing.T) {
 	if schemaVersion == 2 {
 		sha := mnf["config"].(map[string]interface{})["digest"].(string)
 		url := fmt.Sprintf("%v://%v/v2/%v/%v/blobs/%v", setting.ListenMode, Domains, UserName, repoName, sha)
-		out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
-
+		if setting.Authmode == "token" {
+			out, err = exec.Command("sudo", "curl", "-H", authorization, "-X", "DELETE", url).Output()
+		} else {
+			out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
+		}
 		if err != nil {
 			t.Fatalf("Delete tag failed: [Info]%v, [Error]%v", out, err)
 		}
@@ -127,8 +168,11 @@ func TestDeleteError(t *testing.T) {
 			t.Fatalf("Delete blob failed: [Info]%v", out)
 		}
 
-		out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
-
+		if setting.Authmode == "token" {
+			out, err = exec.Command("sudo", "curl", "-H", authorization, "-X", "DELETE", url).Output()
+		} else {
+			out, err = exec.Command("sudo", "curl", "-X", "DELETE", url).Output()
+		}
 		if err != nil {
 			t.Fatalf("Delete tag failed: [Info]%v, [Error]%v", out, err)
 		}
@@ -139,7 +183,7 @@ func TestDeleteError(t *testing.T) {
 
 	if setting.Authmode != "token" {
 		url = fmt.Sprintf("%v://%v/v2/%v/%v/manifests/%v", setting.ListenMode, Domains, UserName, repoName, tag)
-		out, err = exec.Command("sudo", "curl", "-X", "GET", url).Output()
+		out, err = exec.Command("sudo", "curl", "-H", authorization, "-X", "GET", url).Output()
 		if err != nil {
 			t.Fatalf("Delete tag failed: [Info]%v, [Error]%v", out, err)
 		}
@@ -149,13 +193,19 @@ func TestDeleteError(t *testing.T) {
 	}
 }
 func TestTaglistError(t *testing.T) {
-	repoName := "busybox"
-	url := fmt.Sprintf("%v://%v/v2/name/%v/tags/list", setting.ListenMode, Domains, repoName)
-	out, err := exec.Command("sudo", "curl", "-X", "GET", url).Output()
-	if err != nil {
-		t.Fatalf("Get taglist failed: [Info]%v, [Error]%v", out, err)
-	}
-	if !strings.Contains(string(out), "TAG_INVALID") && !strings.Contains(string(out), "NAME_UNKNOWN") {
-		t.Fatalf("Get taglist failed: [Info]%v", string(out))
+	if setting.Authmode != "token" {
+		repoName := "busybox"
+		url := fmt.Sprintf("%v://%v/v2/name/%v/tags/list", setting.ListenMode, Domains, repoName)
+		out, err := exec.Command("sudo", "curl", "-X", "GET", url).Output()
+		if err != nil {
+			t.Fatalf("Get taglist failed: [Info]%v, [Error]%v", out, err)
+		}
+		if !strings.Contains(string(out), "TAG_INVALID") && !strings.Contains(string(out), "NAME_UNKNOWN") {
+			t.Fatalf("Get taglist failed: [Info]%v", string(out))
+		}
+	} else {
+		if err := exec.Command(DockerBinary, "logout", Domains).Run(); err != nil {
+			t.Fatalf("Docker logout failed:[Error]%v", err)
+		}
 	}
 }
