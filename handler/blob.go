@@ -20,13 +20,6 @@ import (
 
 func HeadBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	digest := ctx.Params(":digest")
-	if !strings.Contains(digest, ":") {
-		log.Error("[REGISTRY API V2] Invalid digest format %v", digest)
-
-		result, _ := module.ReportError(module.DIGEST_INVALID, digest)
-		return http.StatusBadRequest, result
-	}
-
 	tarsum := strings.Split(digest, ":")[1]
 
 	ctx.Resp.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -57,13 +50,7 @@ func PostBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 	from := ctx.Query("from")
 	mount := ctx.Query("mount")
 
-	var name string
-	if namespace == "" {
-		name = repository
-	} else {
-		name = namespace + "/" + repository
-	}
-
+	name := namespace + "/" + repository
 	if name != from && from != "" && mount != "" {
 		tarsum := strings.Split(mount, ":")[1]
 		i := new(models.Image)
@@ -99,13 +86,7 @@ func PatchBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte
 	namespace := ctx.Params(":namespace")
 	u := module.NewURLFromRequest(ctx.Req.Request)
 
-	var name string
-	if namespace == "" {
-		name = repository
-	} else {
-		name = namespace + "/" + repository
-	}
-
+	name := namespace + "/" + repository
 	desc := ctx.Params(":uuid")
 	uuid := strings.Split(desc, "?")[0]
 
@@ -145,23 +126,11 @@ func PutBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 	namespace := ctx.Params(":namespace")
 	u := module.NewURLFromRequest(ctx.Req.Request)
 
-	var name string
-	if namespace == "" {
-		name = repository
-	} else {
-		name = namespace + "/" + repository
-	}
-
+	name := namespace + "/" + repository
 	desc := ctx.Params(":uuid")
 	uuid := strings.Split(desc, "?")[0]
 
 	digest := ctx.Query("digest")
-	if !strings.Contains(digest, ":") {
-		log.Error("[REGISTRY API V2] Invalid digest format %v", digest)
-
-		result, _ := module.ReportError(module.DIGEST_INVALID, digest)
-		return http.StatusBadRequest, result
-	}
 	tarsum := strings.Split(digest, ":")[1]
 
 	imagePathTmp := module.GetImagePath(uuid, setting.APIVERSION_V2)
@@ -199,13 +168,6 @@ func PutBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 
 func GetBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	digest := ctx.Params(":digest")
-	if !strings.Contains(digest, ":") {
-		log.Error("[REGISTRY API V2] Invalid digest format %v", digest)
-
-		result, _ := module.ReportError(module.DIGEST_INVALID, digest)
-		return http.StatusBadRequest, result
-	}
-
 	tarsum := strings.Split(digest, ":")[1]
 
 	i := new(models.Image)
@@ -238,14 +200,8 @@ func GetBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 
 func DeleteBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	digest := ctx.Params(":digest")
-	if !strings.Contains(digest, ":") {
-		log.Error("[REGISTRY API V2] Invalid digest format %v", digest)
-
-		result, _ := module.ReportError(module.DIGEST_INVALID, digest)
-		return http.StatusBadRequest, result
-	}
-
 	tarsum := strings.Split(digest, ":")[1]
+
 	i := new(models.Image)
 	if exists, err := i.Get(tarsum); err != nil {
 		log.Error("[REGISTRY API V2] Failed to get blob %v: %v", tarsum, err.Error())

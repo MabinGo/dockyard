@@ -40,7 +40,6 @@ func SetRouters(m *macaron.Macaron) {
 		m.Get("/", handler.GetPingV2Handler)
 		m.Get("/_catalog", handler.GetCatalogV2Handler)
 
-		//user mode: /namespace/repository:tag
 		m.Head("/:namespace/:repository/blobs/:digest", handler.HeadBlobsV2Handler)
 		m.Post("/:namespace/:repository/blobs/uploads", handler.PostBlobsV2Handler)
 		m.Patch("/:namespace/:repository/blobs/uploads/:uuid", handler.PatchBlobsV2Handler)
@@ -51,18 +50,6 @@ func SetRouters(m *macaron.Macaron) {
 		m.Get("/:namespace/:repository/manifests/:tag", handler.GetManifestsV2Handler)
 		m.Delete("/:namespace/:repository/blobs/:digest", handler.DeleteBlobsV2Handler)
 		m.Delete("/:namespace/:repository/manifests/:reference", handler.DeleteManifestsV2Handler)
-
-		//library mode: /repository:tag
-		m.Head("/:repository/blobs/:digest", handler.HeadBlobsV2Handler)
-		m.Post("/:repository/blobs/uploads", handler.PostBlobsV2Handler)
-		m.Patch("/:repository/blobs/uploads/:uuid", handler.PatchBlobsV2Handler)
-		m.Put("/:repository/blobs/uploads/:uuid", handler.PutBlobsV2Handler)
-		m.Get("/:repository/blobs/:digest", handler.GetBlobsV2Handler)
-		m.Put("/:repository/manifests/:tag", handler.PutManifestsV2Handler)
-		m.Get("/:repository/tags/list", handler.GetTagsListV2Handler)
-		m.Get("/:repository/manifests/:tag", handler.GetManifestsV2Handler)
-		m.Delete("/:repository/blobs/:digest", handler.DeleteBlobsV2Handler)
-		m.Delete("/:repository/manifests/:reference", handler.DeleteManifestsV2Handler)
 	})
 
 	//Rkt Registry & Hub API

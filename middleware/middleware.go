@@ -24,7 +24,9 @@ func SetMiddlewares(m *macaron.Macaron) {
 	//Set the response header info
 	m.Use(setRespHeaders())
 
-	m.Use(Handlefunc())
+	m.Use(handlefunc())
+
+	m.Use(dockerValidate())
 
 	//Set recovery handler to returns a middleware that recovers from any panics
 	m.Use(macaron.Recovery())
@@ -64,7 +66,7 @@ func Initfunc() error {
 	return nil
 }
 
-func Handlefunc() macaron.Handler {
+func handlefunc() macaron.Handler {
 	return func(ctx *macaron.Context) {
 		mwname := []string{setting.Auth, setting.JsonConf.Notifications.Name}
 		for _, name := range mwname {

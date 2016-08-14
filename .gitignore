@@ -28,4 +28,4 @@ dockyard
 log/*
 data/*
 
-#auth
+auth

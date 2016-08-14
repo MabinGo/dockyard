@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/astaxie/beego/logs"
 	"github.com/docker/distribution/manifest/schema2"
@@ -30,14 +29,7 @@ func PutManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 	namespace := ctx.Params(":namespace")
 	u := module.NewURLFromRequest(ctx.Req.Request)
 
-	var name string
-	if namespace == "" {
-		name = repository
-		namespace = "library"
-	} else {
-		name = namespace + "/" + repository
-	}
-
+	name := namespace + "/" + repository
 	agent := ctx.Req.Header.Get("User-Agent")
 	tag := ctx.Params(":tag")
 
@@ -142,13 +134,7 @@ func GetTagsListV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byt
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
 
-	var name string
-	if namespace == "" {
-		name = repository
-		namespace = "library"
-	} else {
-		name = namespace + "/" + repository
-	}
+	name := namespace + "/" + repository
 
 	var tagslist []string
 	r := new(models.Repository)
@@ -203,13 +189,7 @@ func GetManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []by
 	namespace := ctx.Params(":namespace")
 	acceptHeaders := ctx.Req.Header["Accept"]
 
-	var name string
-	if namespace == "" {
-		name = repository
-		namespace = "library"
-	} else {
-		name = namespace + "/" + repository
-	}
+	name := namespace + "/" + repository
 
 	tag := ctx.Params(":tag")
 
@@ -294,22 +274,8 @@ func DeleteManifestsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, [
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
 
-	var name string
-	if namespace == "" {
-		name = repository
-		namespace = "library"
-	} else {
-		name = namespace + "/" + repository
-	}
-
+	name := namespace + "/" + repository
 	reference := ctx.Params(":reference")
-	if !strings.Contains(reference, ":") {
-		log.Error("[REGISTRY API V2] Invalid reference format %v", reference)
-
-		detail := map[string]string{"Name": name, "Reference": reference}
-		result, _ := module.ReportError(module.DIGEST_INVALID, detail)
-		return http.StatusBadRequest, result
-	}
 
 	r := new(models.Repository)
 	if exists, err := r.Get(namespace, repository); err != nil {
