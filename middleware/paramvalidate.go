@@ -15,7 +15,7 @@ func dockerValidate() macaron.Handler {
 	return func(ctx *macaron.Context) {
 		if !strings.Contains(ctx.Req.RequestURI, "/v2") ||
 			utils.Compare(ctx.Req.RequestURI, "/v2/") == 0 ||
-			utils.Compare(ctx.Req.RequestURI, "/v2/_catalog") == 0 {
+			strings.Contains(ctx.Req.RequestURI, "/v2/_catalog") {
 			return
 		}
 
