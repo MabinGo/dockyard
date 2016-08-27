@@ -2,12 +2,14 @@ package factory
 
 import (
 	"fmt"
+	"os"
 )
 
 type DrvInterface interface {
 	New() (DrvInterface, error)
 	Get(file string) ([]byte, error)
 	Save(file string) (string, error)
+	ReadStream(path string, offset uint64) (*os.File, error)
 	Delete(file string) error
 }
 

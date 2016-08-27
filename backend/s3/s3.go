@@ -68,6 +68,10 @@ func (s *s3desc) Get(file string) ([]byte, error) {
 	return []byte(""), nil
 }
 
+func (a *s3desc) ReadStream(file string, offset uint64) (*os.File, error) {
+	return nil, nil
+}
+
 func (s *s3desc) Delete(file string) error {
 	return nil
 }

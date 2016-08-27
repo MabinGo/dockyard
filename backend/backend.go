@@ -3,15 +3,9 @@ package backend
 import (
 	"fmt"
 
-	_ "github.com/containerops/dockyard/backend/aliyun"
 	"github.com/containerops/dockyard/backend/factory"
-	_ "github.com/containerops/dockyard/backend/gcs"
-	_ "github.com/containerops/dockyard/backend/oss"
-	_ "github.com/containerops/dockyard/backend/qcloud"
-	_ "github.com/containerops/dockyard/backend/qiniu"
 	_ "github.com/containerops/dockyard/backend/rados"
 	_ "github.com/containerops/dockyard/backend/s3"
-	_ "github.com/containerops/dockyard/backend/upyun"
 )
 
 var Drv factory.DrvInterface

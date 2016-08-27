@@ -4,9 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strings"
+	"time"
+
+	"gopkg.in/macaron.v1"
 
 	"github.com/containerops/dockyard/models"
 	"github.com/containerops/dockyard/module"
@@ -15,10 +20,11 @@ import (
 )
 
 var (
-	RTName  string = "RegionTable"
-	SUCCESS string = "Success"
-	FAILURE string = "Failure"
-	ORIGION string = "Origin"
+	RTName   = "RegionTable"
+	SUCCESS  = "Success"
+	FAILURE  = "Failure"
+	ORIGION  = "Origin"
+	SYNCHING = "Synching"
 )
 
 func TrigSynDRC(namespace, repository, tag, auth string) error {
@@ -35,17 +41,15 @@ func TrigSynDRC(namespace, repository, tag, auth string) error {
 			return err
 		}
 
-		for k, v := range eplist.Endpoints {
+		for _, v := range eplist.Endpoints {
 			if v.Active == false {
 				continue
 			}
 
 			if err := trig(namespace, repository, tag, auth, v.URL); err != nil {
 				synlog.Error("Failed to synchronize %s/%s:%s to DR %s, error: %v", namespace, repository, tag, v.URL, err)
-				eplist.Endpoints[k].Status = FAILURE
 			} else {
 				synlog.Trace("Successed to synchronize %s/%s:%s to DR %s", namespace, repository, tag, v.URL)
-				eplist.Endpoints[k].Status = SUCCESS
 			}
 		}
 
@@ -65,43 +69,109 @@ func trigRegionEndpoint(region *Region, auth string) error {
 		return err
 	}
 
-	activecnt := 0
-	errs := []string{}
+	//activecnt := 0
 	for k := range eplist.Endpoints {
-		if eplist.Endpoints[k].Active == false {
-			activecnt++
-			continue
-		}
-		//TODO: opt to use goroutine
-		if err := trig(region.Namespace, region.Repository, region.Tag, auth, eplist.Endpoints[k].URL); err != nil {
-			//synlog.Error("Failed to synchronize %s/%s:%s to %s, error: %v",
-			//	region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL, err)
-			errs = append(errs, fmt.Sprintf("synchronize to %s error: %s", eplist.Endpoints[k].URL, err.Error()))
-			eplist.Endpoints[k].Status = FAILURE
-			continue
-		} else {
-			//synlog.Trace("Successed to synchronize %s/%s:%s to %s",
-			//	region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL)
-			eplist.Endpoints[k].Status = SUCCESS
-		}
+		go func(k int, eplist *Endpointlist, namespace, repository, tag string) {
+			/*
+				if eplist.Endpoints[k].Active == false {
+					activecnt++
+					return
+				}
+			*/
+			endpointstr := Endpointstr{
+				Area: eplist.Endpoints[k].Area,
+				Name: eplist.Endpoints[k].Name,
+				URL:  eplist.Endpoints[k].URL,
+			}
+
+			synstate := Synstate{
+				Status: SYNCHING,
+				Time:   time.Now(),
+			}
+			if err := saveEndpointstatus(namespace, repository, tag, endpointstr, synstate); err != nil {
+				return
+			}
+
+			//TODO: opt to use goroutine
+			if err := trig(namespace, repository, tag, auth, eplist.Endpoints[k].URL); err != nil {
+				synlog.Error("Failed to synchronize %s/%s:%s to %s, error: %v",
+					region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL, err)
+
+				synstate := Synstate{
+					Status:   FAILURE,
+					Response: err.Error(),
+					Time:     time.Now(),
+				}
+				if err := saveEndpointstatus(namespace, repository, tag, endpointstr, synstate); err != nil {
+					return
+				}
+			} else {
+				synlog.Trace("Successed to synchronize %s/%s:%s to %s",
+					region.Namespace, region.Repository, region.Tag, eplist.Endpoints[k].URL)
+
+				synstate := Synstate{
+					Status: SUCCESS,
+					Time:   time.Now(),
+				}
+				if err := saveEndpointstatus(namespace, repository, tag, endpointstr, synstate); err != nil {
+					return
+				}
+			}
+		}(k, eplist, region.Namespace, region.Repository, region.Tag)
 	}
 
-	if activecnt == len(eplist.Endpoints) {
-		synlog.Trace("no active region")
-	}
+	//if activecnt == len(eplist.Endpoints) {
+	//	synlog.Trace("no active region")
+	//}
 
-	result, _ := json.Marshal(eplist)
-	region.Endpointlist = string(result)
-	if err := region.Save(region.Namespace, region.Repository, region.Tag); err != nil {
+	return nil
+}
+
+func saveEndpointstatus(namespace, repository, tag string, epstr Endpointstr, synstate Synstate) error {
+	synendpoint := new(SynEndpoint)
+	endpointstrlist := new(Endpointstrlist)
+	synstalist := new(Synstatelist)
+
+	if exist, err := synendpoint.Get(namespace, repository, tag); err != nil {
 		return err
-	}
-	/*
-		if len(eplist.Endpoints) == len(errs) {
-			return fmt.Errorf("%v", errs)
+	} else if !exist {
+		synstalist.Synstates = append(synstalist.Synstates, synstate)
+		result, _ := json.Marshal(synstalist)
+		epstr.Synstatelist = string(result)
+		endpointstrlist.Endpointstrs = append(endpointstrlist.Endpointstrs, epstr)
+		result, _ = json.Marshal(endpointstrlist)
+		synendpoint.Endpointstrlist = string(result)
+		if err := synendpoint.Save(namespace, repository, tag); err != nil {
+			return err
 		}
-	*/
-	if len(errs) > 0 {
-		return fmt.Errorf("%v", errs)
+	} else {
+		if err := json.Unmarshal([]byte(synendpoint.Endpointstrlist), endpointstrlist); err != nil {
+			return err
+		}
+		exist := false
+		for k, v := range endpointstrlist.Endpointstrs {
+			if v.Area == epstr.Area && v.Name == epstr.Name && v.URL == epstr.URL {
+				if err := json.Unmarshal([]byte(endpointstrlist.Endpointstrs[k].Synstatelist), synstalist); err != nil {
+					return err
+				}
+				synstalist.Synstates = append(synstalist.Synstates, synstate)
+				result, _ := json.Marshal(synstalist)
+				endpointstrlist.Endpointstrs[k].Synstatelist = string(result)
+				exist = true
+				break
+			}
+		}
+		if !exist {
+			synstalist.Synstates = append(synstalist.Synstates, synstate)
+			result, _ := json.Marshal(synstalist)
+			epstr.Synstatelist = string(result)
+			endpointstrlist.Endpointstrs = append(endpointstrlist.Endpointstrs, epstr)
+		}
+		result, _ := json.Marshal(endpointstrlist)
+		synendpoint.Endpointstrlist = string(result)
+		if err := synendpoint.Save(namespace, repository, tag); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -119,14 +189,74 @@ func trig(namespace, repository, tag, auth, dest string) error {
 	if err != nil {
 		return err
 	}
+
 	url := fmt.Sprintf("%s/syn/%s/%s/%s/content", dest, namespace, repository, tag)
 	if resp, err := module.SendHttpRequest("PUT", url, bytes.NewReader(body), auth); err != nil {
+		return err
+	} else if resp.StatusCode != http.StatusOK {
+		url := fmt.Sprintf("%s/syn/%s/%s/%s/recovery", dest, namespace, repository, tag)
+		if recresp, err := module.SendHttpRequest("POST", url, nil, auth); err != nil {
+			return err
+		} else if recresp.StatusCode != http.StatusOK {
+			return fmt.Errorf("response code %v", recresp.StatusCode)
+		} else {
+			return fmt.Errorf("response code %v", resp.StatusCode)
+		}
+	}
+
+	if err := trigImageContent(namespace, repository, tag, auth, dest); err != nil {
 		//synlog.Error("Failed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
 		return err
-	} else if resp.StatusCode != http.StatusOK { //http.StatusInternalServerError
-		return fmt.Errorf("response code %v", resp.StatusCode)
-		//synlog.Error("Failed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
 	}
+
+	return nil
+}
+
+func recoveryCont(namespace, repository, tag string) error {
+	rec := new(Recovery)
+	if exists, err := rec.Get(namespace, repository, tag); err != nil || !exists {
+		return fmt.Errorf("no valid recovery data")
+	}
+
+	r := new(models.Repository)
+	exists, err := r.Get(namespace, repository)
+	if err != nil || !exists {
+		return fmt.Errorf("invalid %s/%s", namespace, repository)
+	}
+	if err := json.Unmarshal([]byte(rec.Repobak), r); err != nil {
+		return err
+	}
+	if err := r.Save(namespace, repository); err != nil {
+		return err
+	}
+
+	t := new(models.Tag)
+	exists, err = t.Get(namespace, repository, tag)
+	if err != nil || !exists {
+		return fmt.Errorf("invalid %s/%s:%s", namespace, repository, tag)
+	}
+	if err := json.Unmarshal([]byte(rec.Tagbak), t); err != nil {
+		return err
+	}
+	if err := t.Save(namespace, repository, tag); err != nil {
+		return err
+	}
+
+	images := new([]models.Image)
+	if err := json.Unmarshal([]byte(rec.Imagesbak), images); err != nil {
+		return err
+	}
+
+	for _, imgbak := range *images {
+		i := new(models.Image)
+		*i = imgbak
+	}
+
+	if err := rec.Delete(namespace, repository, tag); err != nil {
+		return err
+	}
+
+	//TODO: consider to recycle image content
 
 	return nil
 }
@@ -137,6 +267,55 @@ func saveSynContent(namespace, repository, tag string, reqbody []byte) error {
 	sc.Layers = make(map[string][]byte)
 	if err := json.Unmarshal(reqbody, sc); err != nil {
 		return err
+	}
+
+	//local data recovery
+	tb := new(models.Tag)
+	if exists, err := tb.Get(namespace, repository, tag); err != nil {
+		return err
+	} else if exists {
+		rec := new(Recovery)
+		if _, err := rec.Get(namespace, repository, tag); err != nil {
+			return err
+		}
+
+		if result, err := json.Marshal(tb); err != nil {
+			return err
+		} else {
+			rec.Tagbak = string(result)
+		}
+
+		r := new(models.Repository)
+		if exists, _ := r.Get(namespace, repository); !exists {
+			return fmt.Errorf("not found repository %s/%s", namespace, repository)
+		}
+		if result, err := json.Marshal(r); err != nil {
+			return err
+		} else {
+			rec.Repobak = string(result)
+		}
+
+		var images []models.Image
+		tarsumlist, err := module.GetTarsumlist([]byte(tb.Manifest))
+		if err != nil {
+			return err
+		}
+		for _, tarsum := range tarsumlist {
+			i := new(models.Image)
+			if exists, _ := i.Get(tarsum); !exists {
+				return fmt.Errorf("not found blob %s", tarsum)
+			}
+			images = append(images, *i)
+		}
+		result, err := json.Marshal(images)
+		if err != nil {
+			return err
+		}
+		rec.Imagesbak = string(result)
+
+		if err := rec.Save(namespace, repository, tag); err != nil {
+			return err
+		}
 	}
 
 	//cover repo
@@ -238,6 +417,28 @@ func saveSynContent(namespace, repository, tag string, reqbody []byte) error {
 	return nil
 }
 
+func saveSynImgContent(ctx *macaron.Context, digest string) error {
+	tarsum := strings.Split(digest, ":")[1]
+	layerPath := module.GetLayerPath(tarsum, "layer", setting.APIVERSION_V2)
+
+	file, err := os.Create(layerPath)
+	if err != nil {
+		return err
+	}
+
+	if _, err := io.Copy(file, ctx.Req.Request.Body); err != nil {
+		return err
+	}
+	file.Close()
+	var tarsumlist []string
+	tarsumlist = append(tarsumlist, tarsum)
+	if err := module.UploadLayer(tarsumlist); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func fillSynContent(namespace, repository, tag string, sc *Syncont) error {
 	r := new(models.Repository)
 	if exists, err := r.Get(namespace, repository); err != nil {
@@ -269,15 +470,48 @@ func fillSynContent(namespace, repository, tag string, sc *Syncont) error {
 			return fmt.Errorf("not found image %s", imageId)
 		}
 		sc.Images = append(sc.Images, *i)
-
-		//get layer from local or OSS
-		if data, err := module.DownloadLayer(i.Path); err != nil {
-			return err
-		} else {
-			sc.Layers[imageId] = data
-		}
 	}
 
+	return nil
+}
+
+func trigImageContent(namespace, repository, tag, auth, dest string) error {
+	t := new(models.Tag)
+	if exists, err := t.Get(namespace, repository, tag); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("not found tag %s/%s:%s", namespace, repository, tag)
+	}
+
+	//analyze manifest and get image metadate
+	tarsumlist, err := module.GetTarsumlist([]byte(t.Manifest))
+	if err != nil {
+		return err
+	}
+	//get all images metadata
+	for _, imageId := range tarsumlist {
+		i := new(models.Image)
+		if exists, err := i.Get(imageId); err != nil {
+			return err
+		} else if !exists {
+			return fmt.Errorf("not found image %s", imageId)
+		}
+
+		//get layer from local or OSS
+		if fd, err := module.DownloadLayer(i.Path); err != nil {
+			return err
+		} else {
+			digest := "shas256:" + imageId
+			url := fmt.Sprintf("%s/syn/%s/%s/%s/content/%s", dest, namespace, repository, tag, digest)
+			if resp, err := module.SendHttpRequest("PUT", url, fd, auth); err != nil {
+				//synlog.Error("Failed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
+				return err
+			} else if resp.StatusCode != http.StatusOK { //http.StatusInternalServerError
+				return fmt.Errorf("response code %v", resp.StatusCode)
+				//synlog.Error("Failed to synchronize %s/%s:%s to %s, err:%v", namespace, repository, tag, dest, err)
+			}
+		}
+	}
 	return nil
 }
 
@@ -291,9 +525,6 @@ func saveRegionEndpoint(namespace, repository, tag string, reqbody []byte) error
 	if exists, err := regionIn.Get(namespace, repository, tag); err != nil {
 		return err
 	} else if !exists {
-		for k := range eplist.Endpoints {
-			eplist.Endpoints[k].Status = ORIGION
-		}
 		result, _ := json.Marshal(eplist)
 		regionIn.Namespace, regionIn.Repository, regionIn.Tag, regionIn.Endpointlist =
 			namespace, repository, tag, string(result)
@@ -309,13 +540,11 @@ func saveRegionEndpoint(namespace, repository, tag string, reqbody []byte) error
 				if epin.URL == v.URL {
 					exists = true
 					eporig.Endpoints[k] = epin
-					eporig.Endpoints[k].Status = ORIGION
 					break
 				}
 			}
 
 			if !exists {
-				epin.Status = ORIGION
 				eporig.Endpoints = append(eporig.Endpoints, epin)
 			}
 		}
@@ -380,21 +609,16 @@ func saveEndpoint(regiontyp string, reqbody []byte) error {
 				if epin.URL == v.URL {
 					exists = true
 					eplistOri.Endpoints[k] = epin
-					eplistOri.Endpoints[k].Status = ORIGION
 					break
 				}
 			}
 
 			if !exists {
-				epin.Status = ORIGION
 				eplistOri.Endpoints = append(eplistOri.Endpoints, epin)
 			}
 		}
 	} else {
 		eplistOri = eplistIn
-		for k := range eplistOri.Endpoints {
-			eplistOri.Endpoints[k].Status = ORIGION
-		}
 	}
 
 	result, _ := json.Marshal(eplistOri)
@@ -716,4 +940,15 @@ func GetTaglistFromMaster(namespace, repository, auth string) ([]string, error) 
 	}
 
 	return []string{}, fmt.Errorf("bad remote endpoint")
+}
+
+func getSynchState(namespace, repository, tag string) (string, error) {
+	se := new(SynEndpoint)
+	if exists, err := se.Get(namespace, repository, tag); err != nil {
+		return "", err
+	} else if !exists {
+		return "", nil
+	}
+
+	return se.Endpointstrlist, nil
 }

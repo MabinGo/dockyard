@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -11,9 +12,9 @@ import (
 	"github.com/containerops/dockyard/utils/validate"
 )
 
-func dockerValidate() macaron.Handler {
+func paramChk() macaron.Handler {
 	return func(ctx *macaron.Context) {
-		if !strings.Contains(ctx.Req.RequestURI, "/v2") ||
+		if !strings.HasPrefix(ctx.Req.RequestURI, "/v2") ||
 			utils.Compare(ctx.Req.RequestURI, "/v2/") == 0 ||
 			strings.Contains(ctx.Req.RequestURI, "/v2/_catalog") {
 			return
@@ -23,7 +24,8 @@ func dockerValidate() macaron.Handler {
 		repository := ctx.Params(":repository")
 		if !validate.IsNameValid(namespace) || !validate.IsNameValid(repository) {
 			ctx.Resp.WriteHeader(http.StatusBadRequest)
-			result, _ := module.ReportError(module.NAME_INVALID, "Invalid namespace or repository format")
+			detail := fmt.Sprintf("%s/%s", namespace, repository)
+			result, _ := module.ReportError(module.NAME_INVALID, detail)
 			ctx.Resp.Write(result)
 			return
 		}
@@ -33,7 +35,8 @@ func dockerValidate() macaron.Handler {
 			tag := ctx.Params(":tag")
 			if !validate.IsTagValid(tag) {
 				ctx.Resp.WriteHeader(http.StatusBadRequest)
-				result, _ := module.ReportError(module.TAG_INVALID, "Invalid tag format")
+				detail := fmt.Sprintf("%s", tag)
+				result, _ := module.ReportError(module.TAG_INVALID, detail)
 				ctx.Resp.Write(result)
 				return
 			}
@@ -44,7 +47,8 @@ func dockerValidate() macaron.Handler {
 			digest := ctx.Params(":digest")
 			if !validate.IsDigestValid(digest) {
 				ctx.Resp.WriteHeader(http.StatusBadRequest)
-				result, _ := module.ReportError(module.DIGEST_INVALID, "Invalid digest format")
+				detail := fmt.Sprintf("%s", digest)
+				result, _ := module.ReportError(module.DIGEST_INVALID, detail)
 				ctx.Resp.Write(result)
 				return
 			}
@@ -54,7 +58,8 @@ func dockerValidate() macaron.Handler {
 			reference := ctx.Params(":reference")
 			if !validate.IsDigestValid(reference) {
 				ctx.Resp.WriteHeader(http.StatusBadRequest)
-				result, _ := module.ReportError(module.DIGEST_INVALID, "Invalid reference format")
+				detail := fmt.Sprintf("%s", reference)
+				result, _ := module.ReportError(module.DIGEST_INVALID, detail)
 				ctx.Resp.Write(result)
 				return
 			}

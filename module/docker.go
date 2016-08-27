@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -195,11 +196,20 @@ func SaveV2Conversion(namespace, repository, tag string) error {
 			return fmt.Errorf("Config blob is not exist")
 		}
 
-		layer, err := DownloadLayer(i.Path)
+		dirPath := path.Dir(i.Path)
+		name := path.Base(dirPath)
+		fd, err := DownloadLayer(i.Path)
+		if err != nil {
+			return err
+		}
+		//fd is schemav2 to schemav1 conversion info
+		layer, err := ioutil.ReadAll(fd)
 		if err != nil {
 			return err
 		}
 		t.Conversion = string(layer)
+		fd.Close()
+		os.Remove(GetTmpFile(name))
 	}
 	if err := t.Save(namespace, repository, tag); err != nil {
 		return err
@@ -400,11 +410,12 @@ func GetTarsumlist(data []byte) ([]string, error) {
 }
 
 //image reference counting increased when repository upload successfully
-func UpdateImgRefCnt(tarsumlist []string) error {
-	if len(tarsumlist) <= 0 {
+func UpdateImgRefCnt(newtarsumlist, oldtarsumlist []string, tagexist bool) error {
+	if len(newtarsumlist) <= 0 {
 		return fmt.Errorf("no blobs")
 	}
-	for _, tarsum := range tarsumlist {
+
+	for _, tarsum := range newtarsumlist {
 		i := new(models.Image)
 		if exists, err := i.Get(tarsum); err != nil {
 			return err
@@ -415,6 +426,30 @@ func UpdateImgRefCnt(tarsumlist []string) error {
 		i.Count = i.Count + 1
 		if err := i.Save(tarsum); err != nil {
 			return err
+		}
+	}
+	if tagexist {
+		for _, tarsum := range oldtarsumlist {
+			i := new(models.Image)
+			if exists, err := i.Get(tarsum); err != nil {
+				return err
+			} else if !exists {
+				return fmt.Errorf("blobs not existed")
+			}
+
+			i.Count = i.Count - 1
+			if i.Count == 0 {
+				if err := i.Delete(tarsum); err != nil {
+					return err
+				}
+				if err := DeleteLayer(tarsum, "layer", setting.APIVERSION_V2); err != nil {
+					return err
+				}
+			} else {
+				if err := i.Save(tarsum); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -531,7 +566,6 @@ func UploadLayer(tarsumlist []string) error {
 		} else if !exists {
 			return fmt.Errorf("layer is not existent")
 		}
-
 		if _, err = os.Stat(i.Path); err != nil && !setting.Cachable {
 			continue
 		}
@@ -568,23 +602,24 @@ func UploadLayer(tarsumlist []string) error {
 	return nil
 }
 
-func DownloadLayer(layerpath string) ([]byte, error) {
-	var content []byte
+func DownloadLayer(layerpath string) (*os.File, error) {
 	var err error
-
-	content, err = ioutil.ReadFile(layerpath)
-	if err != nil {
-		if backend.Drv == nil {
-			return []byte(""), fmt.Errorf("Read file failure: %v", err.Error())
-		}
-
-		content, err = backend.Drv.Get(layerpath)
-		if err != nil {
-			return []byte(""), fmt.Errorf("Failed to download layer: %v", err.Error())
+	if _, err := os.Stat(layerpath); err == nil {
+		if fs, err := os.Open(layerpath); err == nil {
+			return fs, nil
 		}
 	}
 
-	return content, nil
+	if backend.Drv == nil {
+		return nil, fmt.Errorf("fail to read file: %v", err.Error())
+	}
+
+	fs, err := backend.Drv.ReadStream(layerpath, 0)
+	if err != nil {
+		return nil, fmt.Errorf("fail to download layer: %v", err.Error())
+	}
+
+	return fs, nil
 }
 
 func DeleteLayer(imageId, layerfile string, apiversion int64) error {
@@ -612,11 +647,9 @@ func SaveLayerLocal(srcPath, srcFile, dstPath, dstFile string, reqbody []byte) (
 	var data []byte
 	if _, err := os.Stat(srcFile); err == nil {
 		//docker 1.9.x above version saves layer in PATCH methord
-		data, _ = ioutil.ReadFile(srcFile)
-		if err := ioutil.WriteFile(dstFile, data, 0777); err != nil {
+		if err := os.Rename(srcFile, dstFile); err != nil {
 			return 0, err
 		}
-		os.RemoveAll(srcPath)
 	} else {
 		//docker 1.9.x below version saves layer in PUT methord
 		data = reqbody

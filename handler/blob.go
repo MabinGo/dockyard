@@ -2,9 +2,10 @@ package handler
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -20,6 +21,13 @@ import (
 
 func HeadBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	digest := ctx.Params(":digest")
+	if !strings.Contains(digest, ":") {
+		log.Error("[REGISTRY API V2] Invalid digest format %v", digest)
+
+		result, _ := module.ReportError(module.DIGEST_INVALID, digest)
+		return http.StatusBadRequest, result
+	}
+
 	tarsum := strings.Split(digest, ":")[1]
 
 	ctx.Resp.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -50,7 +58,13 @@ func PostBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte)
 	from := ctx.Query("from")
 	mount := ctx.Query("mount")
 
-	name := namespace + "/" + repository
+	var name string
+	if namespace == "" {
+		name = repository
+	} else {
+		name = namespace + "/" + repository
+	}
+
 	if name != from && from != "" && mount != "" {
 		tarsum := strings.Split(mount, ":")[1]
 		i := new(models.Image)
@@ -86,7 +100,13 @@ func PatchBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte
 	namespace := ctx.Params(":namespace")
 	u := module.NewURLFromRequest(ctx.Req.Request)
 
-	name := namespace + "/" + repository
+	var name string
+	if namespace == "" {
+		name = repository
+	} else {
+		name = namespace + "/" + repository
+	}
+
 	desc := ctx.Params(":uuid")
 	uuid := strings.Split(desc, "?")[0]
 
@@ -98,12 +118,16 @@ func PatchBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte
 		os.MkdirAll(imagePathTmp, os.ModePerm)
 	}
 
-	if _, err := os.Stat(layerPathTmp); err == nil {
-		os.Remove(layerPathTmp)
-	}
+	file, err := os.Create(layerPathTmp)
+	if err != nil {
+		log.Error("[REGISTRY API V2] Failed to save layer %v: %v", layerPathTmp, err.Error())
 
-	data, _ := ctx.Req.Body().Bytes()
-	if err := ioutil.WriteFile(layerPathTmp, data, 0777); err != nil {
+		result, _ := module.ReportError(module.UNKNOWN, err.Error())
+		return http.StatusInternalServerError, result
+	}
+	defer file.Close()
+	datalen, err := io.Copy(file, ctx.Req.Request.Body)
+	if err != nil {
 		log.Error("[REGISTRY API V2] Failed to save layer %v: %v", layerPathTmp, err.Error())
 
 		result, _ := module.ReportError(module.UNKNOWN, err.Error())
@@ -116,7 +140,7 @@ func PatchBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	ctx.Resp.Header().Set("Docker-Upload-Uuid", uuid)
 	ctx.Resp.Header().Set("Location", random)
-	ctx.Resp.Header().Set("Range", fmt.Sprintf("0-%v", len(data)-1))
+	ctx.Resp.Header().Set("Range", fmt.Sprintf("0-%v", datalen-1))
 
 	return http.StatusAccepted, []byte("")
 }
@@ -126,11 +150,23 @@ func PutBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 	namespace := ctx.Params(":namespace")
 	u := module.NewURLFromRequest(ctx.Req.Request)
 
-	name := namespace + "/" + repository
+	var name string
+	if namespace == "" {
+		name = repository
+	} else {
+		name = namespace + "/" + repository
+	}
+
 	desc := ctx.Params(":uuid")
 	uuid := strings.Split(desc, "?")[0]
 
 	digest := ctx.Query("digest")
+	if !strings.Contains(digest, ":") {
+		log.Error("[REGISTRY API V2] Invalid digest format %v", digest)
+
+		result, _ := module.ReportError(module.DIGEST_INVALID, digest)
+		return http.StatusBadRequest, result
+	}
 	tarsum := strings.Split(digest, ":")[1]
 
 	imagePathTmp := module.GetImagePath(uuid, setting.APIVERSION_V2)
@@ -166,8 +202,16 @@ func PutBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 	return http.StatusCreated, []byte("")
 }
 
-func GetBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
+func GetBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) int {
 	digest := ctx.Params(":digest")
+	if !strings.Contains(digest, ":") {
+		log.Error("[REGISTRY API V2] Invalid digest format %v", digest)
+
+		result, _ := module.ReportError(module.DIGEST_INVALID, digest)
+		ctx.Resp.Write(result)
+		return http.StatusBadRequest
+	}
+
 	tarsum := strings.Split(digest, ":")[1]
 
 	i := new(models.Image)
@@ -175,33 +219,56 @@ func GetBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) 
 		log.Error("[REGISTRY API V2] Failed to get blob %v: %v", tarsum, err.Error())
 
 		result, _ := module.ReportError(module.UNKNOWN, err)
-		return http.StatusBadRequest, result
+		ctx.Resp.Write(result)
+		return http.StatusBadRequest
 	} else if !exists {
 		log.Error("[REGISTRY API V2] Not found blob: %v", tarsum)
 
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, digest)
-		return http.StatusNotFound, result
+		ctx.Resp.Write(result)
+		return http.StatusNotFound
 	}
 
-	layer, err := module.DownloadLayer(i.Path)
+	dirPath := path.Dir(i.Path)
+	name := path.Base(dirPath)
+	fd, err := module.DownloadLayer(i.Path)
 	if err != nil {
 		log.Error("[REGISTRY API V2] Failed to get layer %v: %v", i.Path, err.Error())
 
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, digest)
-		return http.StatusInternalServerError, result
+		ctx.Resp.Write(result)
+		return http.StatusInternalServerError
 	}
+	defer fd.Close()
+	defer os.Remove(module.GetTmpFile(name))
+	fi, err := fd.Stat()
+	if err != nil {
+		log.Error("[REGISTRY API V2] Failed to stat layer %v: %v", i.Path, err.Error())
+
+		result, _ := module.ReportError(module.BLOB_UNKNOWN, digest)
+		ctx.Resp.Write(result)
+		return http.StatusInternalServerError
+	}
+	size := fi.Size()
+	http.ServeContent(ctx.Resp, ctx.Req.Request, name, time.Now(), fd)
 
 	ctx.Resp.Header().Set("Content-Type", "application/octet-stream")
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
-	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(len(layer)))
+	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(size))
 
-	return http.StatusOK, layer
+	return http.StatusOK
 }
 
 func DeleteBlobsV2Handler(ctx *macaron.Context, log *logs.BeeLogger) (int, []byte) {
 	digest := ctx.Params(":digest")
-	tarsum := strings.Split(digest, ":")[1]
+	if !strings.Contains(digest, ":") {
+		log.Error("[REGISTRY API V2] Invalid digest format %v", digest)
 
+		result, _ := module.ReportError(module.DIGEST_INVALID, digest)
+		return http.StatusBadRequest, result
+	}
+
+	tarsum := strings.Split(digest, ":")[1]
 	i := new(models.Image)
 	if exists, err := i.Get(tarsum); err != nil {
 		log.Error("[REGISTRY API V2] Failed to get blob %v: %v", tarsum, err.Error())

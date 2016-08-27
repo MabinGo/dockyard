@@ -40,6 +40,7 @@ func SetRouters(m *macaron.Macaron) {
 		m.Get("/", handler.GetPingV2Handler)
 		m.Get("/_catalog", handler.GetCatalogV2Handler)
 
+		//user mode: /namespace/repository:tag
 		m.Head("/:namespace/:repository/blobs/:digest", handler.HeadBlobsV2Handler)
 		m.Post("/:namespace/:repository/blobs/uploads", handler.PostBlobsV2Handler)
 		m.Patch("/:namespace/:repository/blobs/uploads/:uuid", handler.PatchBlobsV2Handler)
@@ -87,7 +88,9 @@ func SetRouters(m *macaron.Macaron) {
 		m.Post("/:namespace/:repository/:tag/region", synch.PostSynRegionHandler)
 		m.Post("/:namespace/:repository/:tag/trigger", synch.PostSynTrigHandler)
 		m.Get("/:namespace/:repository/:tag/region", synch.GetSynRegionHandler)
+		m.Get("/:namespace/:repository/:tag/state", synch.GetSynStateHandler)
 		m.Delete("/:namespace/:repository/:tag/region", synch.DelSynRegionHandler)
+		m.Post("/:namespace/:repository/:tag/recovery", synch.PostSynRecHandler)
 
 		//master contains all images
 		m.Post("/master", synch.PostSynMasterHandler)
@@ -101,6 +104,7 @@ func SetRouters(m *macaron.Macaron) {
 
 		//common
 		m.Put("/:namespace/:repository/:tag/content", synch.PutSynContHandler)
+		m.Put("/:namespace/:repository/:tag/content/:digest", synch.PutSynImgContHandler)
 		m.Get("/:namespace/:repository/:tag/content", synch.GetSynContHandler)
 
 		//support situation like docker pull -a namespace/repository

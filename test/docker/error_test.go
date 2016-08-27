@@ -37,7 +37,7 @@ func TestErrorInit(t *testing.T) {
 	if out, err := ParseCmdCtx(cmd); err != nil {
 		t.Fatalf("Pull testing preparation is failed: [Info]%v, [Error]%v", out, err)
 	} else {
-		sha := strings.Split(out, "sha:256")[1]
+		sha := strings.Split(out, "sha256:")[1]
 		digest = "sha256:" + strings.Split(sha, " ")[0]
 	}
 
@@ -56,7 +56,6 @@ func TestDeleteError(t *testing.T) {
 		authorization = "Authorization: Basic " + basecode
 	}
 	url := fmt.Sprintf("%v://%v/v2/%v/%v/manifests/%v", setting.ListenMode, Domains, UserName, repoName, tag)
-	var digest string
 	var output []byte
 	var out []byte
 	var err error

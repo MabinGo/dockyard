@@ -213,9 +213,7 @@ func PostSynTrigHandler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusInternalServerError, result
 	}
 
-	info := fmt.Sprintf("Successed to trigger %s/%s:%s synchron", namespace, repository, tag)
-	result, _ = json.Marshal(map[string]string{"message": info})
-	return http.StatusOK, result
+	return http.StatusOK, []byte{}
 }
 
 func GetSynRegionHandler(ctx *macaron.Context) (int, []byte) {
@@ -286,6 +284,23 @@ func PutSynContHandler(ctx *macaron.Context) (int, []byte) {
 	return http.StatusOK, result
 }
 
+func PutSynImgContHandler(ctx *macaron.Context) (int, []byte) {
+	var result []byte
+	digest := ctx.Params(":digest")
+
+	//body, _ := ctx.Req.Body().Bytes()
+	if err := saveSynImgContent(ctx, digest); err != nil {
+		synlog.Error("[REGISTRY API] Failed to save synchron image content: %s", err.Error())
+
+		result, _ = json.Marshal(map[string]string{"message": "Failed to synchron"})
+		return http.StatusInternalServerError, result
+	}
+
+	info := fmt.Sprintf("Successed to synchronize images %s/%s:%s", digest)
+	result, _ = json.Marshal(map[string]string{"message": info})
+	return http.StatusOK, result
+}
+
 func GetSynContHandler(ctx *macaron.Context) (int, []byte) {
 	var result []byte
 
@@ -311,4 +326,42 @@ func GetSynContHandler(ctx *macaron.Context) (int, []byte) {
 	}
 
 	return http.StatusOK, body
+}
+
+func PostSynRecHandler(ctx *macaron.Context) (int, []byte) {
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+	tag := ctx.Params(":tag")
+
+	if err := recoveryCont(namespace, repository, tag); err != nil {
+		synlog.Error("[REGISTRY API] Failed to recover local data: %s", err.Error())
+
+		result, _ := json.Marshal(map[string]string{"message": "Failed to recover local data"})
+		return http.StatusInternalServerError, result
+	}
+
+	return http.StatusOK, []byte("")
+}
+
+func GetSynStateHandler(ctx *macaron.Context) (int, []byte) {
+	var result []byte
+
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+	tag := ctx.Params(":tag")
+
+	epstalist, err := getSynchState(namespace, repository, tag)
+	if err != nil {
+		synlog.Error("[REGISTRY API] Failed to get region endpoint: %s", err.Error())
+
+		result, _ = json.Marshal(map[string]string{"message": "Failed to get synchendpoint state"})
+		return http.StatusInternalServerError, result
+	} else if epstalist == "" {
+		synlog.Error("[REGISTRY API] No state in the synchendpoint")
+
+		result, _ = json.Marshal(map[string]string{"message": "No state in the synchendpoint"})
+		return http.StatusNotFound, result
+	}
+
+	return http.StatusOK, []byte(epstalist)
 }

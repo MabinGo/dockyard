@@ -22,7 +22,7 @@ func SetDockyardMacaron(m *macaron.Macaron) {
 	} else {
 		db.Drv.RegisterModel(new(models.Tag), new(models.Image), new(models.Repository))
 
-		db.Drv.RegisterModel(new(synch.Region), new(synch.RegionTable))
+		db.Drv.RegisterModel(new(synch.Region), new(synch.RegionTable), new(synch.SynEndpoint), new(synch.Recovery))
 
 		if err := db.Drv.InitDB(
 			setting.DBDriver,

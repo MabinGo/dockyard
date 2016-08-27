@@ -109,7 +109,6 @@ func (d *radosdesc) Save(file string) (string, error) {
 		if totalSize > fileSize {
 			for offset := uint64(0); offset < totalSize; offset += d.Chunksize {
 				chunkName := d.getChunkName(oid, offset)
-
 				err = d.Ioctx.Delete(chunkName)
 				if err != nil {
 					return "", err
@@ -147,6 +146,7 @@ func (d *radosdesc) Save(file string) (string, error) {
 
 		// Write chunk object
 		chunkName := d.getChunkName(oid, totalRead)
+
 		if err = d.Ioctx.Write(chunkName, buf[:sizeRead], 0); err != nil {
 			return "", err
 		}
@@ -202,6 +202,61 @@ func (d *radosdesc) Get(objectPath string) ([]byte, error) {
 	}
 
 	return buf, nil
+}
+
+func (d *radosdesc) ReadStream(objectPath string, offset uint64) (*os.File, error) {
+	// Get oid from filename
+	oid, err := d.getOid(objectPath)
+	if err != nil {
+		return nil, err
+	}
+	if oid == "" {
+		return nil, fmt.Errorf("Is virtual directory not file")
+	}
+
+	// Get total size of object from Omap
+	totalSize, err := d.getXattrTotalSize(oid)
+	if err != nil {
+		return nil, err
+	}
+
+	dirPath := path.Dir(objectPath)
+	digest := path.Base(dirPath)
+	if err := os.MkdirAll("data/tmp", os.ModePerm); err != nil {
+		return nil, err
+	}
+	fd, err := os.Create("data/tmp/" + digest)
+	if err != nil {
+		return nil, err
+	}
+	buf := make([]byte, d.Chunksize)
+	readOffset := uint64(0)
+
+	for readNum := d.Chunksize; readNum == d.Chunksize; {
+		// Read chunk object
+		chunkName := d.getChunkName(oid, readOffset)
+		n, err := d.Ioctx.Read(chunkName, buf, 0)
+		if err != nil {
+			fd.Close()
+			os.Remove("data/tmp/" + digest)
+			return nil, err
+		}
+		if _, err := fd.WriteAt(buf[:n], int64(readOffset)); err != nil {
+			fd.Close()
+			os.Remove("data/tmp/" + digest)
+			return nil, err
+		}
+		readNum = uint64(n)
+		readOffset += uint64(readNum)
+	}
+
+	if readOffset != totalSize {
+		fd.Close()
+		os.Remove("data/tmp/" + digest)
+		return nil, fmt.Errorf("File corrupted")
+	}
+
+	return fd, nil
 }
 
 // Delete deletes all objects stored at "path" and its subpaths.

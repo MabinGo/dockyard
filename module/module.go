@@ -21,6 +21,10 @@ func CleanCache(imageId string, apiversion int64) {
 	os.RemoveAll(imagepath)
 }
 
+func GetTmpFile(name string) string {
+	return fmt.Sprintf("%v/tmp/%v", setting.ImagePath, name)
+}
+
 func GetPubkeysPath(namespace, repository string, apiversion int64) string {
 	return fmt.Sprintf("%v/%v/pubkeys/%v/%v", setting.ImagePath, Apis[apiversion], namespace, repository)
 }

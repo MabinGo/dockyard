@@ -261,9 +261,6 @@ func authorized(ctx *macaron.Context) error {
 
 	if repo != "" {
 		accessRecords = appendAccessRecords(accessRecords, r.Method, repo)
-		if fromRepo := r.FormValue("from"); fromRepo != "" {
-			accessRecords = appendAccessRecords(accessRecords, "GET", fromRepo)
-		}
 	} else {
 		if nameRequired(r) {
 			return fmt.Errorf("forbidden: no repository name")

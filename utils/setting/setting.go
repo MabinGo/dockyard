@@ -648,10 +648,17 @@ var (
 	SynUser     string
 	SynPasswd   string
 	SynInterval int64
+	SynchDRC    bool
 )
 
 func setSynchronConfig(conf config.Configer) error {
-	var err error = nil
+	var err, err0 error = nil, nil
+
+	if SynchDRC, err0 = conf.Bool("dockyard::synchdrc"); err0 != nil {
+		SynchDRC = false
+	} else {
+		SynchDRC = true
+	}
 
 	SynMode = conf.String("dockyard::synmode")
 	switch SynMode {

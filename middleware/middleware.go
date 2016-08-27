@@ -21,12 +21,12 @@ func SetMiddlewares(m *macaron.Macaron) {
 	//Set logger handler function, deal with all the Request log output
 	m.Use(logger(setting.RunMode))
 
+	m.Use(paramChk())
+
 	//Set the response header info
 	m.Use(setRespHeaders())
 
-	m.Use(handlefunc())
-
-	m.Use(dockerValidate())
+	m.Use(Handlefunc())
 
 	//Set recovery handler to returns a middleware that recovers from any panics
 	m.Use(macaron.Recovery())
@@ -66,7 +66,7 @@ func Initfunc() error {
 	return nil
 }
 
-func handlefunc() macaron.Handler {
+func Handlefunc() macaron.Handler {
 	return func(ctx *macaron.Context) {
 		mwname := []string{setting.Auth, setting.JsonConf.Notifications.Name}
 		for _, name := range mwname {
