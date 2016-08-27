@@ -70,7 +70,7 @@ type Syncont struct {
 	Repository models.Repository `json:"repository"`
 	Tag        models.Tag        `json:"tag"`
 	Images     []models.Image    `json:"images"`
-	Layers     map[string][]byte `json:"layers"`
+	//Layers     map[string][]byte `json:"layers"`
 }
 
 var (

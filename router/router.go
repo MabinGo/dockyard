@@ -84,30 +84,47 @@ func SetRouters(m *macaron.Macaron) {
 
 	//images synchron
 	m.Group("/syn", func() {
-		//region
+		//sender
+		//region contains part of images
+		//register distribution region
 		m.Post("/:namespace/:repository/:tag/region", synch.PostSynRegionHandler)
-		m.Post("/:namespace/:repository/:tag/trigger", synch.PostSynTrigHandler)
+		//query registered distribution region info
 		m.Get("/:namespace/:repository/:tag/region", synch.GetSynRegionHandler)
+		//query distribution status
 		m.Get("/:namespace/:repository/:tag/state", synch.GetSynStateHandler)
+		//delete distribution region info
 		m.Delete("/:namespace/:repository/:tag/region", synch.DelSynRegionHandler)
+		//trigger register distribution region
+		m.Post("/:namespace/:repository/:tag/trigger", synch.PostSynTrigHandler)
+		//recover region old data while distributed failure
 		m.Post("/:namespace/:repository/:tag/recovery", synch.PostSynRecHandler)
 
+		//sender
 		//master contains all images
+		//register remotion pull region
 		m.Post("/master", synch.PostSynMasterHandler)
+		//query registered remotion info
 		m.Get("/master", synch.GetSynMasterHandler)
+		//delete registered remotion info
 		m.Delete("/master", synch.DelSynMasterHandler)
+		//get repository from remotion
+		m.Get("/:namespace/:repository/:tag/content", synch.GetSynContHandler)
+		//support docker pull -a namespace/repository
+		m.Get("/:namespace/:repository/tags/list", synch.GetTagsListHandler)
 
+		//sender
 		//disaster recovery center
+		//register drc
 		m.Post("/drc", synch.PostSynDRCHandler)
+		//query drc
 		m.Get("/drc", synch.GetSynDRCHandler)
+		//delete drc
 		m.Delete("/drc", synch.DelSynDRCHandler)
 
-		//common
-		m.Put("/:namespace/:repository/:tag/content", synch.PutSynContHandler)
-		m.Put("/:namespace/:repository/:tag/content/:digest", synch.PutSynImgContHandler)
-		m.Get("/:namespace/:repository/:tag/content", synch.GetSynContHandler)
-
-		//support situation like docker pull -a namespace/repository
-		m.Get("/:namespace/:repository/tags/list", synch.GetTagsListHandler)
+		//receiver
+		//get and save the distribution metadata from remotion
+		m.Put("/:namespace/:repository/:tag/content", synch.PutSynMetaDataHandler)
+		//get and save the distribution layer from remotion
+		m.Put("/:namespace/:repository/:tag/content/:digest", synch.PutSynLayerHandler)
 	})
 }

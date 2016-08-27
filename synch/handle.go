@@ -264,7 +264,7 @@ func DelSynRegionHandler(ctx *macaron.Context) (int, []byte) {
 	return http.StatusOK, result
 }
 
-func PutSynContHandler(ctx *macaron.Context) (int, []byte) {
+func PutSynMetaDataHandler(ctx *macaron.Context) (int, []byte) {
 	var result []byte
 
 	namespace := ctx.Params(":namespace")
@@ -272,7 +272,7 @@ func PutSynContHandler(ctx *macaron.Context) (int, []byte) {
 	tag := ctx.Params(":tag")
 
 	body, _ := ctx.Req.Body().Bytes()
-	if err := saveSynContent(namespace, repository, tag, body); err != nil {
+	if err := saveSynMetaDate(namespace, repository, tag, body); err != nil {
 		synlog.Error("[REGISTRY API] Failed to save synchron content: %s", err.Error())
 
 		result, _ = json.Marshal(map[string]string{"message": "Failed to synchron"})
@@ -284,12 +284,12 @@ func PutSynContHandler(ctx *macaron.Context) (int, []byte) {
 	return http.StatusOK, result
 }
 
-func PutSynImgContHandler(ctx *macaron.Context) (int, []byte) {
+func PutSynLayerHandler(ctx *macaron.Context) (int, []byte) {
 	var result []byte
 	digest := ctx.Params(":digest")
 
 	//body, _ := ctx.Req.Body().Bytes()
-	if err := saveSynImgContent(ctx, digest); err != nil {
+	if err := saveSynLayer(ctx, digest); err != nil {
 		synlog.Error("[REGISTRY API] Failed to save synchron image content: %s", err.Error())
 
 		result, _ = json.Marshal(map[string]string{"message": "Failed to synchron"})

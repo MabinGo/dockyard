@@ -23,7 +23,6 @@ var (
 	RTName   = "RegionTable"
 	SUCCESS  = "Success"
 	FAILURE  = "Failure"
-	ORIGION  = "Origin"
 	SYNCHING = "Synching"
 )
 
@@ -262,7 +261,7 @@ func recoveryCont(namespace, repository, tag string) error {
 }
 
 //TODO: must consider parallel, push/pull during synchron
-func saveSynContent(namespace, repository, tag string, reqbody []byte) error {
+func saveSynMetaDate(namespace, repository, tag string, reqbody []byte) error {
 	sc := new(Syncont)
 	sc.Layers = make(map[string][]byte)
 	if err := json.Unmarshal(reqbody, sc); err != nil {
@@ -410,9 +409,9 @@ func saveSynContent(namespace, repository, tag string, reqbody []byte) error {
 	}
 
 	//upload to oss
-	if err := module.UploadLayer(tarsumlist); err != nil {
-		return err
-	}
+	//if err := module.UploadLayer(tarsumlist); err != nil {
+	//	return err
+	//}
 
 	return nil
 }
@@ -432,6 +431,8 @@ func saveSynImgContent(ctx *macaron.Context, digest string) error {
 	file.Close()
 	var tarsumlist []string
 	tarsumlist = append(tarsumlist, tarsum)
+
+	//upload to oss
 	if err := module.UploadLayer(tarsumlist); err != nil {
 		return err
 	}
@@ -890,7 +891,7 @@ func GetSynFromMaster(namespace, repository, tag, auth string) error {
 			continue
 		}
 
-		if err := saveSynContent(namespace, repository, tag, body); err != nil {
+		if err := saveSynMetaDate(namespace, repository, tag, body); err != nil {
 			continue
 		}
 
