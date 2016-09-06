@@ -1,129 +1,88 @@
+/*
+Copyright 2015 The ContainerOps Authors All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package module
 
 import (
-	"crypto/tls"
-	"crypto/x509"
+	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"net/http"
-	"net/url"
-	"os"
-	"strings"
 
-	"github.com/containerops/dockyard/utils/setting"
+	"github.com/containerops/dockyard/setting"
 )
+
+var (
+	DIGEST_INVALID        = "DIGEST_INVALID"
+	SIZE_INVALID          = "SIZE_INVALID"
+	NAME_INVALID          = "NAME_INVALID"
+	TAG_INVALID           = "TAG_INVALID"
+	NAME_UNKNOWN          = "NAME_UNKNOWN"
+	MANIFEST_UNKNOWN      = "MANIFEST_UNKNOWN"
+	MANIFEST_INVALID      = "MANIFEST_INVALID"
+	MANIFEST_UNVERIFIED   = "MANIFEST_UNVERIFIED"
+	MANIFEST_BLOB_UNKNOWN = "MANIFEST_BLOB_UNKNOWN"
+	BLOB_UNKNOWN          = "BLOB_UNKNOWN"
+	BLOB_UPLOAD_UNKNOWN   = "BLOB_UPLOAD_UNKNOWN"
+	BLOB_UPLOAD_INVALID   = "BLOB_UPLOAD_INVALID"
+	UNKNOWN               = "UNKNOWN"
+	UNSUPPORTED           = "UNSUPPORTED"
+	UNAUTHORIZED          = "UNAUTHORIZED"
+	DENIED                = "DENIED"
+	UNAVAILABLE           = "UNAVAILABLE"
+	TOOMANYREQUESTS       = "TOOMANYREQUESTS"
+	APINOTCOMPATIBLE      = "APINOTCOMPATIBLE"
+)
+
+type Errors struct {
+	Errors []Errunit `json:"errors"`
+}
+
+type Errunit struct {
+	Code    string      `json:"code"`
+	Message string      `json:"message"`
+	Detail  interface{} `json:"detail,omitempty"`
+}
+
+func ReportError(code string, message string, detail interface{}) ([]byte, error) {
+	var errs = Errors{}
+
+	item := Errunit{
+		Code:    code,
+		Message: message,
+		Detail:  detail,
+	}
+
+	errs.Errors = append(errs.Errors, item)
+
+	return json.Marshal(errs)
+}
 
 var Apis = []string{"images", "tarsum", "acis"}
 
-func CleanCache(imageId string, apiversion int64) {
-	imagepath := GetImagePath(imageId, apiversion)
-	os.RemoveAll(imagepath)
-}
-
-func GetTmpFile(name string) string {
-	return fmt.Sprintf("%v/tmp/%v", setting.ImagePath, name)
-}
-
-func GetPubkeysPath(namespace, repository string, apiversion int64) string {
-	return fmt.Sprintf("%v/%v/pubkeys/%v/%v", setting.ImagePath, Apis[apiversion], namespace, repository)
-}
-
 func GetImagePath(imageId string, apiversion int64) string {
-	return fmt.Sprintf("%v/%v/%v", setting.ImagePath, Apis[apiversion], imageId)
+	return fmt.Sprintf("%v/%v/%v", setting.DockyardPath, Apis[apiversion], imageId)
 }
 
 func GetManifestPath(imageId string, apiversion int64) string {
-	return fmt.Sprintf("%v/%v/%v/manifest", setting.ImagePath, Apis[apiversion], imageId)
+	return fmt.Sprintf("%v/%v/%v/manifest", setting.DockyardPath, Apis[apiversion], imageId)
 }
 
 func GetSignaturePath(imageId, signfile string, apiversion int64) string {
-	return fmt.Sprintf("%v/%v/%v/%v", setting.ImagePath, Apis[apiversion], imageId, signfile)
+	return fmt.Sprintf("%v/%v/%v/%v", setting.DockyardPath, Apis[apiversion], imageId, signfile)
 }
 
 func GetLayerPath(imageId, layerfile string, apiversion int64) string {
-	return fmt.Sprintf("%v/%v/%v/%v", setting.ImagePath, Apis[apiversion], imageId, layerfile)
-}
-
-func SendHttpRequest(methord, rawurl string, body io.Reader, auth string) (*http.Response, error) {
-	url, err := url.Parse(rawurl)
-	if err != nil {
-		return &http.Response{}, err
-	}
-
-	var client *http.Client
-	switch url.Scheme {
-	case "":
-		fallthrough
-	case "https":
-		pool := x509.NewCertPool()
-		crt, err := ioutil.ReadFile(setting.HttpsCertFile)
-		if err != nil {
-			return &http.Response{}, err
-		}
-		pool.AppendCertsFromPEM(crt)
-
-		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{
-				RootCAs:            pool,
-				InsecureSkipVerify: true,
-			},
-		}
-		client = &http.Client{Transport: tr}
-	case "http":
-		client = &http.Client{}
-	default:
-		return &http.Response{}, fmt.Errorf("bad url schema: %v", url.Scheme)
-	}
-
-	req, err := http.NewRequest(methord, url.String(), body)
-	if err != nil {
-		return &http.Response{}, err
-	}
-	req.URL.RawQuery = req.URL.Query().Encode()
-	req.Header.Set("Authorization", auth)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return &http.Response{}, err
-	}
-
-	return resp, nil
-}
-
-// NewURLFromRequest uses information from an *http.Request to
-// construct the url.
-func NewURLFromRequest(r *http.Request) *url.URL {
-	var scheme string
-
-	forwardedProto := r.Header.Get("X-Forwarded-Proto")
-
-	switch {
-	case len(forwardedProto) > 0:
-		scheme = forwardedProto
-	case r.TLS != nil:
-		scheme = "https"
-	case len(r.URL.Scheme) > 0:
-		scheme = r.URL.Scheme
-	default:
-		scheme = "http"
-	}
-
-	host := r.Host
-	forwardedHost := r.Header.Get("X-Forwarded-Host")
-	if len(forwardedHost) > 0 {
-		// According to the Apache mod_proxy docs, X-Forwarded-Host can be a
-		// comma-separated list of hosts, to which each proxy appends the
-		// requested host. We want to grab the first from this comma-separated
-		// list.
-		hosts := strings.SplitN(forwardedHost, ",", 2)
-		host = strings.TrimSpace(hosts[0])
-	}
-
-	u := &url.URL{
-		Scheme: scheme,
-		Host:   host,
-	}
-
-	return u
+	return fmt.Sprintf("%v/%v/%v/%v", setting.DockyardPath, Apis[apiversion], imageId, layerfile)
 }

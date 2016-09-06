@@ -1,78 +1,37 @@
+/*
+Copyright 2015 The ContainerOps Authors All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package middleware
 
-import (
-	"fmt"
-
-	"gopkg.in/macaron.v1"
-
-	"github.com/containerops/dockyard/utils/setting"
-)
+import "gopkg.in/macaron.v1"
 
 func SetMiddlewares(m *macaron.Macaron) {
+	m.Use(logger())
+
+	m.Use(Cors())
+	m.Use(WebV1())
+
 	//Set static file directory,static file access without log output
 	m.Use(macaron.Static("external", macaron.StaticOptions{
 		Expires: func() string { return "max-age=0" },
 	}))
 
-	InitLog(setting.RunMode, setting.LogPath)
-
-	//Set global Logger
-	m.Map(Log)
-	//Set logger handler function, deal with all the Request log output
-	m.Use(logger(setting.RunMode))
-
-	m.Use(paramChk())
-
-	//Set the response header info
-	m.Use(setRespHeaders())
-
-	m.Use(Handlefunc())
+	m.Use(dockerParamChk())
+	m.Use(appParamChk())
 
 	//Set recovery handler to returns a middleware that recovers from any panics
 	m.Use(macaron.Recovery())
-}
-
-type HandlerInterface interface {
-	InitFunc() error
-	Handler(ctx *macaron.Context)
-}
-
-var Middleware = map[string]HandlerInterface{}
-
-func Register(name string, handler HandlerInterface) error {
-	if handler == nil {
-		return fmt.Errorf("Handler is nil")
-	}
-
-	if _, existed := Middleware[name]; existed {
-		return fmt.Errorf("%v has already been registered", name)
-	}
-
-	Middleware[name] = handler
-
-	return nil
-}
-
-func Initfunc() error {
-	mwname := []string{setting.Auth, setting.JsonConf.Notifications.Name}
-	for _, name := range mwname {
-		if handlerinterface, existed := Middleware[name]; existed {
-			if err := handlerinterface.InitFunc(); err != nil {
-				return fmt.Errorf("Init %v failed, err: %v", name, err.Error())
-			}
-		}
-	}
-
-	return nil
-}
-
-func Handlefunc() macaron.Handler {
-	return func(ctx *macaron.Context) {
-		mwname := []string{setting.Auth, setting.JsonConf.Notifications.Name}
-		for _, name := range mwname {
-			if handlerinterface, existed := Middleware[name]; existed {
-				handlerinterface.Handler(ctx)
-			}
-		}
-	}
 }
