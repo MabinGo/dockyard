@@ -348,11 +348,10 @@ func (i *ArtifactV1) FreeLock() error {
 	return db.Instance.UpdateField(i, "locked", 0)
 }
 
-type AppV1State struct {
+type State struct {
 	Id         int64     `json:"id" gorm:"primary_key"`
 	Namespace  string    `json:"namespace" sql:"not null;type:varchar(255)"`
 	Repository string    `json:"repository" sql:"not null;type:varchar(255)"`
-	Host       string    `json:"host" sql:"not null;type:varchar(128)"`
 	UUID       string    `json:"uuid" sql:"not null;type:varchar(128)"`
 	Offset     int64     `json:"offset" sql:"default:0"`
 	Locked     int64     `json:"-" sql:"default:false"`
@@ -360,14 +359,14 @@ type AppV1State struct {
 	//Action     string    `json:"action" sql:"not null;type:varchar(32)"`
 }
 
-func (s *AppV1State) AddUniqueIndex() error {
-	if err := db.Instance.AddUniqueIndex(s, "idx_appv1state_namespace_repository", "namespace", "repository"); err != nil {
-		return fmt.Errorf("create unique index idx_appv1state_namespace_repository error:" + err.Error())
+func (s *State) AddUniqueIndex() error {
+	if err := db.Instance.AddUniqueIndex(s, "idx_state_namespace_repository", "namespace", "repository"); err != nil {
+		return fmt.Errorf("create unique index idx_state_namespace_repository error:" + err.Error())
 	}
 	return nil
 }
 
-func (s *AppV1State) IsExist() (bool, error) {
+func (s *State) IsExist() (bool, error) {
 	if records, err := db.Instance.Count(s); err != nil {
 		return false, err
 	} else if records > int64(0) {
@@ -376,7 +375,7 @@ func (s *AppV1State) IsExist() (bool, error) {
 	return false, nil
 }
 
-func (s *AppV1State) Save(condition *AppV1State) error {
+func (s *State) Save(condition *State) error {
 	exists, err := condition.IsExist()
 	if err != nil {
 		return err

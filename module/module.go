@@ -17,15 +17,15 @@ limitations under the License.
 package module
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 
 	"github.com/containerops/dockyard/models"
 	"github.com/containerops/dockyard/setting"
+	"github.com/containerops/dockyard/utils/uuid"
 )
 
 var (
@@ -92,15 +92,59 @@ func GetLayerPath(imageId, layerfile string, apiversion int64) string {
 	return fmt.Sprintf("%v/%v/%v/%v", setting.DockyardPath, Apis[apiversion], imageId, layerfile)
 }
 
-func GenerateAppUUID(reponame string) (string, error) {
+type hmacKey string
 
-	return "", nil
+var DYHMAC = "dockyard-state"
+
+func GenerateToken(namespace, repository string) (string, error) {
+	uuid, err := uuid.NewUUID()
+	if err != nil {
+		return "", err
+	}
+
+	s := new(models.State)
+	s.Namespace = namespace
+	s.Repository = repository
+	s.UUID = uuid
+	//s.Offset =
+	s.Locked = 1
+	//s.CreatedAt = 1
+
+	hk := hmacKey(DYHMAC)
+	token, err := hk.packUploadState(*s)
+	if err != nil {
+		return "", err
+	}
+	fmt.Printf("\n #### mabin 000: token %v \n", err)
+
+	ts := new(models.State)
+	ts.Namespace, ts.Repository = namespace, repository
+	*ts = *s
+	if err := s.Save(ts); err != nil {
+		return "", err
+	}
+
+	return token, nil
 }
 
-type HmacKey string
+func VerifyToken(namespace, repository, token string) error {
+	hk := hmacKey(DYHMAC)
+	state, err := hk.unpackUploadState(token)
+	if err != nil {
+		return err
+	}
 
-func (hk HmacKey) UnpackUploadState(token string) (models.AppV1State, error) {
-	var state models.AppV1State
+	if (state.Namespace != namespace) || (state.Repository != repository) {
+		return fmt.Errorf("invalid repository %v/%v", namespace, repository)
+	}
+
+	// TODO:
+
+	return nil
+}
+
+func (hk hmacKey) unpackUploadState(token string) (models.State, error) {
+	var state models.State
 
 	tokenBytes, err := base64.URLEncoding.DecodeString(token)
 	if err != nil {
@@ -127,7 +171,7 @@ func (hk HmacKey) UnpackUploadState(token string) (models.AppV1State, error) {
 	return state, nil
 }
 
-func (hk HmacKey) PackUploadState(lus models.AppV1State) (string, error) {
+func (hk hmacKey) packUploadState(lus models.State) (string, error) {
 	mac := hmac.New(sha256.New, []byte(hk))
 	p, err := json.Marshal(lus)
 	if err != nil {
