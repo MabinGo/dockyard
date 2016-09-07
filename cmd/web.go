@@ -108,7 +108,7 @@ func initDockyardDB() error {
 		setting.DatabaseURI, setting.DatabaseName); err != nil {
 		return err
 	}
-	if err := db.Instance.RegisterModel(new(models.AppV1), new(models.ArtifactV1)); err != nil {
+	if err := db.Instance.RegisterModel(new(models.AppV1), new(models.ArtifactV1), new(models.AppV1State)); err != nil {
 		return err
 	}
 	if err := db.Instance.RegisterModel(new(models.DockerV2), new(models.DockerImageV2),
@@ -119,6 +119,9 @@ func initDockyardDB() error {
 		return err
 	}
 	if err := new(models.ArtifactV1).AddUniqueIndex(); err != nil {
+		return err
+	}
+	if err := new(models.AppV1State).AddUniqueIndex(); err != nil {
 		return err
 	}
 	if err := new(models.DockerV2).AddUniqueIndex(); err != nil {

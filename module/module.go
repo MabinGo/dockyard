@@ -20,6 +20,11 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+
+	"github.com/containerops/dockyard/models"
 	"github.com/containerops/dockyard/setting"
 )
 
@@ -85,4 +90,50 @@ func GetSignaturePath(imageId, signfile string, apiversion int64) string {
 
 func GetLayerPath(imageId, layerfile string, apiversion int64) string {
 	return fmt.Sprintf("%v/%v/%v/%v", setting.DockyardPath, Apis[apiversion], imageId, layerfile)
+}
+
+func GenerateAppUUID(reponame string) (string, error) {
+
+	return "", nil
+}
+
+type HmacKey string
+
+func (hk HmacKey) UnpackUploadState(token string) (models.AppV1State, error) {
+	var state models.AppV1State
+
+	tokenBytes, err := base64.URLEncoding.DecodeString(token)
+	if err != nil {
+		return state, err
+	}
+	mac := hmac.New(sha256.New, []byte(hk))
+
+	if len(tokenBytes) < mac.Size() {
+		return state, fmt.Errorf("invalid token")
+	}
+
+	macBytes := tokenBytes[:mac.Size()]
+	messageBytes := tokenBytes[mac.Size():]
+
+	mac.Write(messageBytes)
+	if !hmac.Equal(mac.Sum(nil), macBytes) {
+		return state, fmt.Errorf("invalid token")
+	}
+
+	if err := json.Unmarshal(messageBytes, &state); err != nil {
+		return state, err
+	}
+
+	return state, nil
+}
+
+func (hk HmacKey) PackUploadState(lus models.AppV1State) (string, error) {
+	mac := hmac.New(sha256.New, []byte(hk))
+	p, err := json.Marshal(lus)
+	if err != nil {
+		return "", err
+	}
+
+	mac.Write(p)
+	return base64.URLEncoding.EncodeToString(append(mac.Sum(nil), p...)), nil
 }

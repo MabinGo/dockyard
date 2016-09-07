@@ -24,7 +24,6 @@ import (
 	"github.com/containerops/dockyard/db"
 )
 
-//
 type DockerV2 struct {
 	Id            int64      `json:"id" gorm:"primary_key"`
 	Namespace     string     `json:"namespace" sql:"not null;type:varchar(255)"`
@@ -40,12 +39,38 @@ type DockerV2 struct {
 	DeletedAt     *time.Time `json:"deleted" sql:"index"`
 }
 
-//
+type DockerTagV2 struct {
+	Id        int64      `json:"id" gorm:"primary_key"`
+	DockerV2  int64      `json:"dockerv2" sql:"not null"`
+	Tag       string     `json:"tag" sql:"not null;type:varchar(255)"`
+	ImageId   string     `json:"imageid" sql:"not null;type:varchar(255)"`
+	Manifest  string     `json:"manifest" sql:"null;type:text"`
+	Schema    int64      `json:"schema" sql:""`
+	Locked    int64      `json:"locked" sql:"default:0"`
+	CreatedAt time.Time  `json:"created" sql:""`
+	UpdatedAt time.Time  `json:"updated" sql:""`
+	DeletedAt *time.Time `json:"deleted" sql:"index"`
+}
+
+type DockerImageV2 struct {
+	Id              int64      `json:"id" gorm:"primary_key"`
+	ImageId         string     `json:"imageid" sql:"null;type:varchar(255)"`
+	BlobSum         string     `json:"blobsum" sql:"unique;type:varchar(255)"`
+	V1Compatibility string     `json:"v1compatibility" sql:"null;type:text"`
+	Path            string     `json:"path" sql:"null;type:text"`
+	OSS             string     `json:"oss" sql:"null;type:text"`
+	Size            int64      `json:"size" sql:"default:0"`
+	Reference       int64      `json:"reference" sql:"default:0"`
+	Locked          int64      `json:"locked" sql:"default:0"`
+	CreatedAt       time.Time  `json:"created" sql:""`
+	UpdatedAt       time.Time  `json:"updated" sql:""`
+	DeletedAt       *time.Time `json:"deleted" sql:"index"`
+}
+
 func (*DockerV2) TableName() string {
 	return "docker_V2"
 }
 
-//
 func (r *DockerV2) AddUniqueIndex() error {
 	if err := db.Instance.AddUniqueIndex(r, "idx_dockerv2_namespace_repository",
 		"namespace", "repository"); err != nil {
@@ -54,7 +79,6 @@ func (r *DockerV2) AddUniqueIndex() error {
 	return nil
 }
 
-//
 func (r *DockerV2) IsExist() (bool, error) {
 	if records, err := db.Instance.Count(r); err != nil {
 		return false, err
@@ -105,28 +129,10 @@ func (r *DockerV2) List(results *[]DockerV2) error {
 	return nil
 }
 
-//
-type DockerImageV2 struct {
-	Id              int64      `json:"id" gorm:"primary_key"`
-	ImageId         string     `json:"imageid" sql:"null;type:varchar(255)"`
-	BlobSum         string     `json:"blobsum" sql:"unique;type:varchar(255)"`
-	V1Compatibility string     `json:"v1compatibility" sql:"null;type:text"`
-	Path            string     `json:"path" sql:"null;type:text"`
-	OSS             string     `json:"oss" sql:"null;type:text"`
-	Size            int64      `json:"size" sql:"default:0"`
-	Reference       int64      `json:"reference" sql:"default:0"`
-	Locked          int64      `json:"locked" sql:"default:0"`
-	CreatedAt       time.Time  `json:"created" sql:""`
-	UpdatedAt       time.Time  `json:"updated" sql:""`
-	DeletedAt       *time.Time `json:"deleted" sql:"index"`
-}
-
-//
 func (*DockerImageV2) TableName() string {
 	return "docker_image_v2"
 }
 
-//
 func (i *DockerImageV2) AddUniqueIndex() error {
 	if err := db.Instance.AddUniqueIndex(i, "idx_dockerimagev2_blobsum",
 		"blob_sum"); err != nil {
@@ -135,7 +141,6 @@ func (i *DockerImageV2) AddUniqueIndex() error {
 	return nil
 }
 
-//
 func (i *DockerImageV2) IsExist() (bool, error) {
 	if records, err := db.Instance.Count(i); err != nil {
 		return false, err
@@ -145,7 +150,6 @@ func (i *DockerImageV2) IsExist() (bool, error) {
 	return false, nil
 }
 
-//
 func (i *DockerImageV2) Read() (bool, error) {
 	if records, err := db.Instance.Count(i); err != nil {
 		return false, err
@@ -160,7 +164,6 @@ func (i *DockerImageV2) Read() (bool, error) {
 	return false, nil
 }
 
-//
 func (i *DockerImageV2) Write() (bool, error) {
 	if records, err := db.Instance.Count(i); err != nil {
 		return false, err
@@ -173,7 +176,6 @@ func (i *DockerImageV2) Write() (bool, error) {
 	return false, nil
 }
 
-//
 func (i *DockerImageV2) Save() error {
 	exists, err := i.IsExist()
 	if err != nil {
@@ -193,7 +195,6 @@ func (i *DockerImageV2) Save() error {
 	return err
 }
 
-//
 func (i *DockerImageV2) SaveAtom(condition *DockerImageV2) error {
 	exists, err := condition.IsExist()
 	if err != nil {
@@ -238,26 +239,10 @@ func (i *DockerImageV2) FreeLock() error {
 	return db.Instance.Save(i)
 }
 
-//
-type DockerTagV2 struct {
-	Id        int64      `json:"id" gorm:"primary_key"`
-	DockerV2  int64      `json:"dockerv2" sql:"not null"`
-	Tag       string     `json:"tag" sql:"not null;type:varchar(255)"`
-	ImageId   string     `json:"imageid" sql:"not null;type:varchar(255)"`
-	Manifest  string     `json:"manifest" sql:"null;type:text"`
-	Schema    int64      `json:"schema" sql:""`
-	Locked    int64      `json:"locked" sql:"default:0"`
-	CreatedAt time.Time  `json:"created" sql:""`
-	UpdatedAt time.Time  `json:"updated" sql:""`
-	DeletedAt *time.Time `json:"deleted" sql:"index"`
-}
-
-//
 func (*DockerTagV2) TableName() string {
 	return "docker_tag_V2"
 }
 
-//
 func (t *DockerTagV2) AddUniqueIndex() error {
 	if err := db.Instance.AddUniqueIndex(t, "idx_dockertagv2_dockerv2_tag",
 		"docker_v2", "tag"); err != nil {
@@ -266,7 +251,6 @@ func (t *DockerTagV2) AddUniqueIndex() error {
 	return nil
 }
 
-//
 func (t *DockerTagV2) IsExist() (bool, error) {
 	if records, err := db.Instance.Count(t); err != nil {
 		return false, err

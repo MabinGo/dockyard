@@ -568,8 +568,7 @@ func AppGetMetaSignV1Handler(ctx *macaron.Context) (int, []byte) {
 func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
-	//host := ctx.Req.Request.Host
-	//host := ctx.Req.Request.Header.Get("Host")
+	host := ctx.Req.Request.Header.Get("Host")
 	//authorization := ctx.Req.Request.Header.Get("Authorization")
 
 	uuid, err := uuid.NewUUID()
@@ -580,6 +579,39 @@ func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 		return http.StatusInternalServerError, result
 	}
+
+	s := new(models.AppV1State)
+	s.Namespace = namespace
+	s.Repository = repository
+	s.Host = host
+	s.UUID = uuid
+	//s.Offset =
+	s.Locked = 1
+	//s.CreatedAt = 1
+
+	hk := module.HmacKey("dockyard-local-appv1")
+	var appUploadId string
+	if stat, err := hk.PackUploadState(*s); err != nil {
+		fmt.Printf("\n #### mabin: PackUploadState %v \n", err)
+		return http.StatusInternalServerError, []byte{}
+	} else {
+		appUploadId = stat
+	}
+
+	as := models.AppV1State{}
+	if as, err = hk.UnpackUploadState(uuid); err != nil {
+		fmt.Printf("\n #### mabin: UnpackUploadState %v \n", err)
+		return http.StatusInternalServerError, []byte{}
+	}
+
+	ts := new(models.AppV1State)
+	ts.Namespace, ts.Repository = namespace, repository
+	*ts = *s
+	if err := s.Save(ts); err != nil {
+		fmt.Printf("\n #### mabin: Save state %v \n", err)
+		return http.StatusInternalServerError, []byte{}
+	}
+
 	//state := utils.MD5(fmt.Sprintf("%s/%s", name, time.Now().UnixNano()/int64(time.Millisecond)))
 
 	a := new(models.AppV1)
@@ -595,7 +627,7 @@ func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 	}
 
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	ctx.Resp.Header().Set("App-Upload-UUID", uuid)
+	ctx.Resp.Header().Set("App-Upload-UUID", appUploadId)
 
 	result, _ := json.Marshal(map[string]string{})
 	return http.StatusAccepted, result
@@ -634,6 +666,12 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	host := ctx.Req.Request.Host
 	//authorization := ctx.Req.Request.Header.Get("Authorization")
 	uuid := ctx.Req.Request.Header.Get("App-Upload-UUID")
+
+	as := models.AppV1State{}
+	if as, err = hk.UnpackUploadState(uuid); err != nil {
+		fmt.Printf("\n #### mabin: UnpackUploadState %v \n", err)
+		return http.StatusInternalServerError, []byte{}
+	}
 
 	digest := ctx.Req.Request.Header.Get("Digest")
 	hashes := strings.Split(digest, ":")

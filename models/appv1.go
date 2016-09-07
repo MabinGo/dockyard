@@ -24,7 +24,6 @@ import (
 	"github.com/containerops/dockyard/db"
 )
 
-//
 type AppV1 struct {
 	Id          int64      `json:"id" gorm:"primary_key"`
 	Namespace   string     `json:"namespace" sql:"not null;type:varchar(255)"`
@@ -41,12 +40,44 @@ type AppV1 struct {
 	DeletedAt   *time.Time `json:"deleted" sql:"index"`
 }
 
-//
+type ArtifactV1 struct {
+	Id        int64      `json:"id" gorm:"primary_key"`
+	AppV1     int64      `json:"appv1" sql:"not null"`
+	OS        string     `json:"os" sql:"null;type:varchar(128)"`
+	Arch      string     `json:"arch" sql:"null;type:varchar(128)"`
+	Type      string     `json:"type" sql:"null;type:varchar(64)"`
+	App       string     `json:"app" sql:"not null;varchar(255)"`
+	Tag       string     `json:"tag" sql:"not null;varchar(255)"`
+	BlobSum   string     `json:"blobsum" sql:"type:varchar(255)"`
+	OSS       string     `json:"oss" sql:"null;type:text"`
+	Manifests string     `json:"manifests" sql:"null;type:text"`
+	URL       string     `json:"url" sql:"null;type:text"`
+	Path      string     `json:"path" sql:"null;type:text"`
+	Size      int64      `json:"size" sql:"default:0"`
+	Locked    int64      `json:"locked" sql:"default:0"` // If the sql field name is changed, update the FreeLock method!
+	CreatedAt time.Time  `json:"created" sql:""`
+	UpdatedAt time.Time  `json:"updated" sql:""`
+	DeletedAt *time.Time `json:"deleted" sql:"index"`
+}
+
+type SearchOutput struct {
+	Namespace   string    `json:"namespace" description:"application's namespace"`
+	Repository  string    `json:"repository" description:"name of application's repository"`
+	OS          string    `json:"os" description:"os type of application, default is 'undefine'"`
+	Arch        string    `json:"arch" description:"architecture of application, default is 'undefine'"`
+	Name        string    `json:"name" description:"application's name"`
+	Tag         string    `json:"tag" description:"application's tag"`
+	Description string    `json:"description" description:"application's description"`
+	URL         string    `json:"url" description:"application's downloading url"`
+	Size        int64     `json:"size" description:"application's size"`
+	CreatedAt   time.Time `json:"createdat" description:"application's created time"`
+	UpdatedAt   time.Time `json:"updatedat" description:"application's updated time"`
+}
+
 func (a *AppV1) TableName() string {
 	return "app_v1"
 }
 
-//
 func (a *AppV1) AddUniqueIndex() error {
 	if err := db.Instance.AddUniqueIndex(a, "idx_appv1_namespace_repository",
 		"namespace", "repository"); err != nil {
@@ -55,7 +86,6 @@ func (a *AppV1) AddUniqueIndex() error {
 	return nil
 }
 
-//
 func (a *AppV1) IsExist() (bool, error) {
 	if records, err := db.Instance.Count(a); err != nil {
 		return false, err
@@ -106,32 +136,10 @@ func (a *AppV1) List(results *[]AppV1) error {
 	return nil
 }
 
-//
-type ArtifactV1 struct {
-	Id        int64      `json:"id" gorm:"primary_key"`
-	AppV1     int64      `json:"appv1" sql:"not null"`
-	OS        string     `json:"os" sql:"null;type:varchar(128)"`
-	Arch      string     `json:"arch" sql:"null;type:varchar(128)"`
-	Type      string     `json:"type" sql:"null;type:varchar(64)"`
-	App       string     `json:"app" sql:"not null;varchar(255)"`
-	Tag       string     `json:"tag" sql:"not null;varchar(255)"`
-	BlobSum   string     `json:"blobsum" sql:"type:varchar(255)"`
-	OSS       string     `json:"oss" sql:"null;type:text"`
-	Manifests string     `json:"manifests" sql:"null;type:text"`
-	URL       string     `json:"url" sql:"null;type:text"`
-	Path      string     `json:"path" sql:"null;type:text"`
-	Size      int64      `json:"size" sql:"default:0"`
-	Locked    int64      `json:"locked" sql:"default:0"` // If the sql field name is changed, update the FreeLock method!
-	CreatedAt time.Time  `json:"created" sql:""`
-	UpdatedAt time.Time  `json:"updated" sql:""`
-	DeletedAt *time.Time `json:"deleted" sql:"index"`
-}
-
 func (*ArtifactV1) TableName() string {
 	return "artifact_v1"
 }
 
-//
 func (i *ArtifactV1) AddUniqueIndex() error {
 	if err := db.Instance.AddUniqueIndex(i, "idx_artifactv1_appv1id_os_arch_app_tag_type",
 		"app_v1", "os", "arch", "app", "tag", "type"); err != nil {
@@ -144,7 +152,6 @@ func (i *ArtifactV1) AddUniqueIndex() error {
 	return nil
 }
 
-//
 func (i *ArtifactV1) IsExist() (bool, error) {
 	if records, err := db.Instance.Count(i); err != nil {
 		return false, err
@@ -154,7 +161,6 @@ func (i *ArtifactV1) IsExist() (bool, error) {
 	return false, nil
 }
 
-//
 func (i *ArtifactV1) Read() (bool, error) {
 	if records, err := db.Instance.Count(i); err != nil {
 		return false, err
@@ -169,17 +175,14 @@ func (i *ArtifactV1) Read() (bool, error) {
 	return false, nil
 }
 
-//
 func (i *ArtifactV1) Create() error {
 	return db.Instance.Create(i)
 }
 
-//
 func (i *ArtifactV1) Update() error {
 	return db.Instance.Save(i)
 }
 
-//
 func (i *ArtifactV1) Save(condition *ArtifactV1) error {
 	exists, err := condition.IsExist()
 	if err != nil {
@@ -201,7 +204,6 @@ func (i *ArtifactV1) Save(condition *ArtifactV1) error {
 	return err
 }
 
-//
 func (i *ArtifactV1) SaveAtom(condition *ArtifactV1) error {
 	exists, err := condition.IsExist()
 	if err != nil {
@@ -222,7 +224,6 @@ func (i *ArtifactV1) SaveAtom(condition *ArtifactV1) error {
 	return err
 }
 
-//
 func (i *ArtifactV1) UpdateBlob(blobsum string) (string, error) {
 	digest := ""
 
@@ -341,23 +342,52 @@ func (i *ArtifactV1) QueryScope(results interface{}, parameters ...string) error
 	return nil
 }
 
-//
 func (i *ArtifactV1) FreeLock() error {
 	// i.Locked = 0
 	// return db.Instance.Update(i)
 	return db.Instance.UpdateField(i, "locked", 0)
 }
 
-type SearchOutput struct {
-	Namespace   string    `json:"namespace" description:"application's namespace"`
-	Repository  string    `json:"repository" description:"name of application's repository"`
-	OS          string    `json:"os" description:"os type of application, default is 'undefine'"`
-	Arch        string    `json:"arch" description:"architecture of application, default is 'undefine'"`
-	Name        string    `json:"name" description:"application's name"`
-	Tag         string    `json:"tag" description:"application's tag"`
-	Description string    `json:"description" description:"application's description"`
-	URL         string    `json:"url" description:"application's downloading url"`
-	Size        int64     `json:"size" description:"application's size"`
-	CreatedAt   time.Time `json:"createdat" description:"application's created time"`
-	UpdatedAt   time.Time `json:"updatedat" description:"application's updated time"`
+type AppV1State struct {
+	Id         int64     `json:"id" gorm:"primary_key"`
+	Namespace  string    `json:"namespace" sql:"not null;type:varchar(255)"`
+	Repository string    `json:"repository" sql:"not null;type:varchar(255)"`
+	Host       string    `json:"host" sql:"not null;type:varchar(128)"`
+	UUID       string    `json:"uuid" sql:"not null;type:varchar(128)"`
+	Offset     int64     `json:"offset" sql:"default:0"`
+	Locked     int64     `json:"-" sql:"default:false"`
+	CreatedAt  time.Time `json:"created" sql:""`
+	//Action     string    `json:"action" sql:"not null;type:varchar(32)"`
+}
+
+func (s *AppV1State) AddUniqueIndex() error {
+	if err := db.Instance.AddUniqueIndex(s, "idx_appv1state_namespace_repository", "namespace", "repository"); err != nil {
+		return fmt.Errorf("create unique index idx_appv1state_namespace_repository error:" + err.Error())
+	}
+	return nil
+}
+
+func (s *AppV1State) IsExist() (bool, error) {
+	if records, err := db.Instance.Count(s); err != nil {
+		return false, err
+	} else if records > int64(0) {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (s *AppV1State) Save(condition *AppV1State) error {
+	exists, err := condition.IsExist()
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		err = db.Instance.Create(s)
+	} else {
+		s.Id = condition.Id
+		err = db.Instance.Update(s)
+	}
+
+	return err
 }
