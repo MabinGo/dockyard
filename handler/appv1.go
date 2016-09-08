@@ -53,8 +53,8 @@ func AppDiscoveryV1Handler(ctx *macaron.Context) (int, []byte) {
 // @Failure 500 {string} string "internal server error, response error information of api server"
 // @Router /app/v1/search [get]
 func AppGlobalSearchV1Handler(ctx *macaron.Context) (int, []byte) {
-	//host := ctx.Req.Request.Header.Get("Host")
-	//authorization := ctx.Req.Request.Header.Get("Authorization")
+	//host := ctx.Req.Header.Get("Host")
+	//authorization := ctx.Req.Header.Get("Authorization")
 	u := ctx.Req.Request.URL
 
 	values := ctx.Query("key")
@@ -135,8 +135,8 @@ func AppGlobalSearchV1Handler(ctx *macaron.Context) (int, []byte) {
 func AppScopedSearchV1Handler(ctx *macaron.Context) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
-	//host := ctx.Req.Request.Header.Get("Host")
-	//authorization := ctx.Req.Request.Header.Get("Authorization")
+	//host := ctx.Req.Header.Get("Host")
+	//authorization := ctx.Req.Header.Get("Authorization")
 	u := ctx.Req.Request.URL
 
 	values := ctx.Query("key")
@@ -225,8 +225,8 @@ func AppScopedSearchV1Handler(ctx *macaron.Context) (int, []byte) {
 func AppGetListAppV1Handler(ctx *macaron.Context) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
-	//host := ctx.Req.Request.Header.Get("Host")
-	//authorization := ctx.Req.Request.Header.Get("Authorization")
+	//host := ctx.Req.Header.Get("Host")
+	//authorization := ctx.Req.Header.Get("Authorization")
 	a := new(models.AppV1)
 	a.Namespace, a.Repository = namespace, repository
 	if exists, err := a.IsExist(); err != nil {
@@ -311,10 +311,17 @@ func AppGetFileV1Handler(ctx *macaron.Context) int {
 	architecture := ctx.Params(":arch")
 	appname := ctx.Params(":app")
 	tag := ctx.Params(":tag")
-	//host := ctx.Req.Request.Header.Get("Host")
-	//authorization := ctx.Req.Request.Header.Get("Authorization")
+	//host := ctx.Req.Header.Get("Host")
+	//authorization := ctx.Req.Header.Get("Authorization")
 	if tag == "" {
 		tag = "latest"
+	}
+
+	current.Namespace, current.Repository = namespace, repository
+	if exists, err := current.Read(); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("not found repository %v/%v", namespace, repository)
 	}
 
 	a := new(models.AppV1)
@@ -361,12 +368,6 @@ func AppGetFileV1Handler(ctx *macaron.Context) int {
 		return http.StatusNotFound
 	}
 
-	defer func() {
-		if err := i.FreeLock(); err != nil {
-			panic(err)
-		}
-	}()
-
 	fd, err := os.Open(i.Path)
 	if err != nil {
 		message := fmt.Sprintf("Failed to get APP %s", i.Path)
@@ -412,8 +413,8 @@ func AppGetManifestsV1Handler(ctx *macaron.Context) (int, []byte) {
 	architecture := ctx.Params(":arch")
 	appname := ctx.Params(":app")
 	tag := ctx.Params(":tag")
-	//host := ctx.Req.Request.Header.Get("Host")
-	//authorization := ctx.Req.Request.Header.Get("Authorization")
+	//host := ctx.Req.Header.Get("Host")
+	//authorization := ctx.Req.Header.Get("Authorization")
 	if tag == "" {
 		tag = "latest"
 	}
@@ -456,11 +457,6 @@ func AppGetManifestsV1Handler(ctx *macaron.Context) (int, []byte) {
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, nil)
 		return http.StatusNotFound, result
 	}
-	defer func() {
-		if err := i.FreeLock(); err != nil {
-			panic(err)
-		}
-	}()
 
 	content := []byte(i.Manifests)
 
@@ -488,8 +484,8 @@ func AppGetMetaV1Handler(ctx *macaron.Context) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
 	//TODO:
-	//host := ctx.Req.Request.Header.Get("Host")
-	//authorization := ctx.Req.Request.Header.Get("Authorization")
+	//host := ctx.Req.Header.Get("Host")
+	//authorization := ctx.Req.Header.Get("Authorization")
 
 	var upService us.UpdateService
 	content, err := upService.ReadMeta("app", namespace, repository)
@@ -524,8 +520,8 @@ func AppGetMetaSignV1Handler(ctx *macaron.Context) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
 	//TODO: auth and check repo validataion
-	//host := ctx.Req.Request.Header.Get("Host")
-	//authorization := ctx.Req.Request.Header.Get("Authorization")
+	//host := ctx.Req.Header.Get("Host")
+	//authorization := ctx.Req.Header.Get("Authorization")
 
 	if err := us.KeyManagerEnabled(); err != nil {
 		message := "KeyManager is not enabled or does not set proper"
@@ -567,8 +563,8 @@ func AppGetMetaSignV1Handler(ctx *macaron.Context) (int, []byte) {
 func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
-	//host := ctx.Req.Request.Header.Get("Host")
-	//authorization := ctx.Req.Request.Header.Get("Authorization")
+	//host := ctx.Req.Header.Get("Host")
+	//authorization := ctx.Req.Header.Get("Authorization")
 
 	// sqllock
 	a := new(models.AppV1)
@@ -583,9 +579,9 @@ func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusInternalServerError, result
 	}
 
-	token, err := module.GenerateToken(namespace, repository)
+	sessionid, err := module.GetSessionID(namespace, repository)
 	if err != nil {
-		message := fmt.Sprintf("Failed to generate uuid %s/%s", namespace, repository)
+		message := fmt.Sprintf("Failed to get App upload UUID %s/%s", namespace, repository)
 		log.Errorf("%s: %v", message, err.Error())
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
@@ -594,7 +590,7 @@ func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 	// sqlunlock
 
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	ctx.Resp.Header().Set("App-Upload-UUID", token)
+	ctx.Resp.Header().Set("App-Upload-UUID", sessionid)
 
 	result, _ := json.Marshal(map[string]string{})
 	return http.StatusAccepted, result
@@ -631,10 +627,17 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	appname := ctx.Params(":app")
 	tag := ctx.Params(":tag")
 	host := ctx.Req.Request.Host
-	//authorization := ctx.Req.Request.Header.Get("Authorization")
-	uuid := ctx.Req.Request.Header.Get("App-Upload-UUID")
+	//authorization := ctx.Req.Header.Get("Authorization")
+	sessionid := ctx.Req.Header.Get("App-Upload-UUID")
+	if err := module.ValidateSessionID(namespace, repository, sessionid); err != nil {
+		message := fmt.Sprintf("%v", err)
+		log.Error(message)
 
-	digest := ctx.Req.Request.Header.Get("Digest")
+		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, sessionid)
+		return http.StatusBadRequest, result
+	}
+
+	digest := ctx.Req.Header.Get("Digest")
 	hashes := strings.Split(digest, ":")
 
 	if tag == "" {
@@ -770,7 +773,7 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	}
 
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	ctx.Resp.Header().Set("App-Upload-UUID", uuid)
+	ctx.Resp.Header().Set("App-Upload-UUID", sessionid)
 
 	result, _ := json.Marshal(map[string]string{})
 	return http.StatusCreated, result
@@ -802,10 +805,18 @@ func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
 	architecture := ctx.Params(":arch")
 	appname := ctx.Params(":app")
 	tag := ctx.Params(":tag")
-	//host := ctx.Req.Request.Header.Get("Host")
-	//authorization := ctx.Req.Request.Header.Get("Authorization")
-	//uuid := ctx.Req.Request.Header.Get("App-Upload-UUID")
-	digest := ctx.Req.Request.Header.Get("Digest")
+	//host := ctx.Req.Header.Get("Host")
+	//authorization := ctx.Req.Header.Get("Authorization")
+	sessionid := ctx.Req.Header.Get("App-Upload-UUID")
+	if err := module.ValidateSessionID(namespace, repository, sessionid); err != nil {
+		message := fmt.Sprintf("%v", err)
+		log.Error(message)
+
+		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, sessionid)
+		return http.StatusBadRequest, result
+	}
+
+	digest := ctx.Req.Header.Get("Digest")
 	if tag == "" {
 		tag = "latest"
 	}
@@ -863,16 +874,23 @@ func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
 // @Failure 400 {string} string "bad request, parameters or url is error, response error information"
 // @Router /app/v1/{namespace}/{repository}/{os}/{arch}/{app}/{status}/{tag} [patch]
 func AppPatchFileV1Handler(ctx *macaron.Context) (int, []byte) {
-	//repository := ctx.Params(":repository")
-	//namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+	namespace := ctx.Params(":namespace")
 	operatingSystem := ctx.Params(":os")
 	architecture := ctx.Params(":arch")
 	appname := ctx.Params(":app")
 	status := ctx.Params(":status")
 	tag := ctx.Params(":tag")
-	//host := ctx.Req.Request.Header.Get("Host")
-	//authorization := ctx.Req.Request.Header.Get("Authorization")
-	//uuid := ctx.Req.Request.Header.Get("App-Upload-UUID")
+	//host := ctx.Req.Header.Get("Host")
+	//authorization := ctx.Req.Header.Get("Authorization")
+	sessionid := ctx.Req.Header.Get("App-Upload-UUID")
+	if err := module.ValidateSessionID(namespace, repository, sessionid); err != nil {
+		message := fmt.Sprintf("%v", err)
+		log.Error(message)
+
+		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, sessionid)
+		return http.StatusBadRequest, result
+	}
 
 	if strings.EqualFold("done", status) {
 		result, _ := json.Marshal(map[string]string{})
@@ -912,8 +930,8 @@ func AppDeleteFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	architecture := ctx.Params(":arch")
 	appname := ctx.Params(":app")
 	tag := ctx.Params(":tag")
-	//host := ctx.Req.Request.Header.Get("Host")
-	//authorization := ctx.Req.Request.Header.Get("Authorization")
+	//host := ctx.Req.Header.Get("Host")
+	//authorization := ctx.Req.Header.Get("Authorization")
 	if tag == "" {
 		tag = "latest"
 	}

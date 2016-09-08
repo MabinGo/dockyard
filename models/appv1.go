@@ -342,31 +342,33 @@ func (i *ArtifactV1) QueryScope(results interface{}, parameters ...string) error
 	return nil
 }
 
+/*
 func (i *ArtifactV1) FreeLock() error {
 	// i.Locked = 0
 	// return db.Instance.Update(i)
 	return db.Instance.UpdateField(i, "locked", 0)
 }
+*/
 
-type State struct {
+type Session struct {
 	Id         int64     `json:"id" gorm:"primary_key"`
 	Namespace  string    `json:"namespace" sql:"not null;type:varchar(255)"`
 	Repository string    `json:"repository" sql:"not null;type:varchar(255)"`
-	UUID       string    `json:"uuid" sql:"not null;type:varchar(128)"`
-	Offset     int64     `json:"offset" sql:"default:0"`
 	Locked     int64     `json:"-" sql:"default:false"`
-	CreatedAt  time.Time `json:"created" sql:""`
+	CreatedAt  time.Time `json:"create_at" sql:""`
+	//Operator   string    `json:"operator" sql:"type:varchar(255)"`
+	//UUID       string    `json:"uuid" sql:"not null;type:varchar(128)"`
 	//Action     string    `json:"action" sql:"not null;type:varchar(32)"`
 }
 
-func (s *State) AddUniqueIndex() error {
-	if err := db.Instance.AddUniqueIndex(s, "idx_state_namespace_repository", "namespace", "repository"); err != nil {
-		return fmt.Errorf("create unique index idx_state_namespace_repository error:" + err.Error())
+func (s *Session) AddUniqueIndex() error {
+	if err := db.Instance.AddUniqueIndex(s, "idx_session_namespace_repository", "namespace", "repository"); err != nil {
+		return fmt.Errorf("create unique index idx_session_namespace_repository error:" + err.Error())
 	}
 	return nil
 }
 
-func (s *State) IsExist() (bool, error) {
+func (s *Session) IsExist() (bool, error) {
 	if records, err := db.Instance.Count(s); err != nil {
 		return false, err
 	} else if records > int64(0) {
@@ -375,7 +377,7 @@ func (s *State) IsExist() (bool, error) {
 	return false, nil
 }
 
-func (s *State) Save(condition *State) error {
+func (s *Session) Save(condition *Session) error {
 	exists, err := condition.IsExist()
 	if err != nil {
 		return err
@@ -389,4 +391,17 @@ func (s *State) Save(condition *State) error {
 	}
 
 	return err
+}
+
+func (s *Session) Read() (bool, error) {
+	if records, err := db.Instance.Count(s); err != nil {
+		return false, err
+	} else if records > int64(0) {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (s *Session) UpdateLockState(value int64) error {
+	return db.Instance.UpdateField(s, "Locked", value)
 }

@@ -22,6 +22,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/containerops/dockyard/models"
 	"github.com/containerops/dockyard/setting"
@@ -94,84 +95,155 @@ func GetLayerPath(imageId, layerfile string, apiversion int64) string {
 
 type hmacKey string
 
-var DYHMAC = "dockyard-state"
+var DYSESSIONID = "dockyardsessionid"
 
-func GenerateToken(namespace, repository string) (string, error) {
-	uuid, err := uuid.NewUUID()
-	if err != nil {
-		return "", err
-	}
+var (
+	UNLOCK = 0
+	LOCK   = 1
+)
 
-	s := new(models.State)
-	s.Namespace = namespace
-	s.Repository = repository
-	s.UUID = uuid
-	//s.Offset =
-	s.Locked = 1
-	//s.CreatedAt = 1
+var StateLock sync.RWMutex
 
-	hk := hmacKey(DYHMAC)
-	token, err := hk.packUploadState(*s)
-	if err != nil {
-		return "", err
-	}
-	fmt.Printf("\n #### mabin 000: token %v \n", err)
-
-	ts := new(models.State)
-	ts.Namespace, ts.Repository = namespace, repository
-	*ts = *s
-	if err := s.Save(ts); err != nil {
-		return "", err
-	}
-
-	return token, nil
+func SessionLock() {
+	StateLock.Lock()
 }
 
-func VerifyToken(namespace, repository, token string) error {
-	hk := hmacKey(DYHMAC)
-	state, err := hk.unpackUploadState(token)
+func SessionUnlock() {
+	StateLock.Unlock()
+}
+
+func IsSessionActive(namespace, repository string) (bool, error) {
+	SessionLock()
+	defer SessionUnlock()
+	current := new(models.Session)
+	current.Namespace, current.Repository = namespace, repository
+	if exists, err := current.Read(); err != nil {
+		return false, err
+	} else if !exists {
+		return false, fmt.Errorf("not found repository %v/%v", namespace, repository)
+	} else {
+
+	}
+
+	return true, nil
+}
+
+func GetSessionID(namespace, repository string) (string, error) {
+	SessionLock()
+	defer SessionUnlock()
+
+	hk := hmacKey(DYSESSIONID)
+	origin := new(models.Session)
+	origin.Namespace, origin.Repository = namespace, repository
+	exists, err := origin.Read()
+	if err != nil {
+		return "", err
+	}
+
+	if exists {
+		if ori.Locked == LOCK {
+			return "", fmt.Errorf("%v/%v is busy", namespace, repository)
+		} else {
+			origin.Locked = LOCK
+			sessionid, err := hk.packUploadState(*origin)
+			if err != nil {
+				return "", err
+			}
+
+			if err := origin.UpdateLockState(LOCK); err != nil {
+				return err
+			}
+			return sessionid, nil
+		}
+	}
+
+	current := new(models.Session)
+	current.Namespace = namespace
+	current.Repository = repository
+	current.Locked = LOCK
+
+	sessionid, err := hk.packUploadState(*current)
+	if err != nil {
+		return "", err
+	}
+	fmt.Printf("\n #### mabin 000: sessionid %v \n", err)
+
+	tmp := new(models.Session)
+	tmp.Namespace, tmp.Repository = namespace, repository
+	*tmp = *current
+	if err := current.Save(tmp); err != nil {
+		return "", err
+	}
+
+	return sessionid, nil
+}
+
+func ValidateSessionID(namespace, repository, sessionid string) error {
+	hk := hmacKey(DYSESSIONID)
+	session, err := hk.unpackUploadState(sessionid)
 	if err != nil {
 		return err
 	}
 
-	if (state.Namespace != namespace) || (state.Repository != repository) {
-		return fmt.Errorf("invalid repository %v/%v", namespace, repository)
+	if (session.Namespace != namespace) || (session.Repository != repository) {
+		return fmt.Errorf("mismatch repository %v/%v", namespace, repository)
 	}
 
-	// TODO:
+	SessionLock()
+	defer SessionUnlock()
+	current := new(models.Session)
+	current.Namespace, current.Repository = namespace, repository
+	if exists, err := current.Read(); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("not found repository %v/%v", namespace, repository)
+	}
+
+	if current.Locked != session.Locked {
+		return fmt.Errorf("invalid session lock state %v", session.Locked)
+	}
+
+	if current.Locked == LOCK {
+		return fmt.Errorf("%v/%v is busy", namespace, repository)
+	} else if current.Locked == UNLOCK {
+		// TODO:
+		if err := current.UpdateLockState(LOCK); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
 
-func (hk hmacKey) unpackUploadState(token string) (models.State, error) {
-	var state models.State
+func (hk hmacKey) unpackUploadState(sessionid string) (models.Session, error) {
+	var session models.Session
 
-	tokenBytes, err := base64.URLEncoding.DecodeString(token)
+	content, err := base64.URLEncoding.DecodeString(sessionid)
 	if err != nil {
-		return state, err
+		return models.Session{}, err
 	}
 	mac := hmac.New(sha256.New, []byte(hk))
 
-	if len(tokenBytes) < mac.Size() {
-		return state, fmt.Errorf("invalid token")
+	if len(content) < mac.Size() {
+		return models.Session{}, fmt.Errorf("invalid sessionid")
 	}
 
-	macBytes := tokenBytes[:mac.Size()]
-	messageBytes := tokenBytes[mac.Size():]
+	macBytes := content[:mac.Size()]
+	messageBytes := content[mac.Size():]
 
 	mac.Write(messageBytes)
 	if !hmac.Equal(mac.Sum(nil), macBytes) {
-		return state, fmt.Errorf("invalid token")
+		return models.Session{}, fmt.Errorf("invalid sessionid")
 	}
 
-	if err := json.Unmarshal(messageBytes, &state); err != nil {
-		return state, err
+	if err := json.Unmarshal(messageBytes, &session); err != nil {
+		return models.Session{}, err
 	}
 
-	return state, nil
+	return session, nil
 }
 
-func (hk hmacKey) packUploadState(lus models.State) (string, error) {
+func (hk hmacKey) packUploadState(lus models.Session) (string, error) {
 	mac := hmac.New(sha256.New, []byte(hk))
 	p, err := json.Marshal(lus)
 	if err != nil {

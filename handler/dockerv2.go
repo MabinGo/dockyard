@@ -321,11 +321,6 @@ func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 		return http.StatusInternalServerError, result
 	}
-	defer func() {
-		if err := i.FreeLock(); err != nil {
-			panic(err)
-		}
-	}()
 
 	layerlen, err := module.SaveLayerLocal(imagePathTmp, layerPathTmp, imagePath, layerPath, ctx.Req.Request.Body)
 	if err != nil {
@@ -411,11 +406,6 @@ func GetBlobsV2Handler(ctx *macaron.Context) int {
 		ctx.Resp.Write(result)
 		return http.StatusNotFound
 	}
-	defer func() {
-		if err := i.FreeLock(); err != nil {
-			panic(err)
-		}
-	}()
 
 	fd, err := os.Open(i.Path)
 	if err != nil {

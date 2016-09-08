@@ -234,10 +234,12 @@ func (i *DockerImageV2) Delete() error {
 	return err
 }
 
+/*
 func (i *DockerImageV2) FreeLock() error {
 	i.Locked = 0
 	return db.Instance.Save(i)
 }
+*/
 
 func (*DockerTagV2) TableName() string {
 	return "docker_tag_V2"
