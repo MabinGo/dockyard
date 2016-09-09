@@ -25,6 +25,7 @@ import (
 const (
 	DOCKERAPIV1 = iota
 	DOCKERAPIV2
+	APPAPIV1
 )
 
 var (

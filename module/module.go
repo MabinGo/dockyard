@@ -159,7 +159,7 @@ func GetAction(method string) string {
 	}
 }
 
-func SessionLock(namespace, repository, action string) error {
+func SessionLock(namespace, repository, action string, version int64) error {
 	sessionLock()
 	defer sessionUnlock()
 	/*
@@ -169,7 +169,7 @@ func SessionLock(namespace, repository, action string) error {
 		}
 	*/
 	current := new(models.Session)
-	exists, err := current.Read(namespace, repository)
+	exists, err := current.Read(namespace, repository, version)
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func SessionLock(namespace, repository, action string) error {
 			current.Repository = repository
 			//current.UUID = uuid
 			current.Locked++
-			if err := current.Save(namespace, repository); err != nil {
+			if err := current.Save(namespace, repository, version); err != nil {
 				// TODO: what would be handled when failure
 				return err
 			}
@@ -189,7 +189,7 @@ func SessionLock(namespace, repository, action string) error {
 				return fmt.Errorf("%v/%v is busy", namespace, repository)
 			} else {
 				current.Locked++
-				if err := current.Save(namespace, repository); err != nil {
+				if err := current.Save(namespace, repository, version); err != nil {
 					// TODO: what would be handled when failure
 					return err
 				}
@@ -201,7 +201,7 @@ func SessionLock(namespace, repository, action string) error {
 			current.Repository = repository
 			//current.UUID = uuid
 			current.Locked = -1
-			if err := current.Save(namespace, repository); err != nil {
+			if err := current.Save(namespace, repository, version); err != nil {
 				// TODO: what would be handled when failure
 				return err
 			}
@@ -210,7 +210,7 @@ func SessionLock(namespace, repository, action string) error {
 				return fmt.Errorf("%v/%v is busy", namespace, repository)
 			} else {
 				current.Locked = -1
-				if err := current.Save(namespace, repository); err != nil {
+				if err := current.Save(namespace, repository, version); err != nil {
 					// TODO: what would be handled when failure
 					return err
 				}
@@ -223,12 +223,12 @@ func SessionLock(namespace, repository, action string) error {
 	return nil
 }
 
-func SessionUnlock(namespace, repository, action string) error {
+func SessionUnlock(namespace, repository, action string, version int64) error {
 	sessionLock()
 	defer sessionUnlock()
 
 	current := new(models.Session)
-	exists, err := current.Read(namespace, repository)
+	exists, err := current.Read(namespace, repository, version)
 	if err != nil {
 		return err
 	}
@@ -238,7 +238,7 @@ func SessionUnlock(namespace, repository, action string) error {
 		case "pull":
 			if current.Locked > 0 {
 				current.Locked--
-				if err := current.Save(namespace, repository); err != nil {
+				if err := current.Save(namespace, repository, version); err != nil {
 					// TODO: what would be handled when failure
 					return err
 				}
@@ -247,7 +247,7 @@ func SessionUnlock(namespace, repository, action string) error {
 			}
 		case "delete":
 			current.Locked = 0
-			if err := current.Save(namespace, repository); err != nil {
+			if err := current.Save(namespace, repository, version); err != nil {
 				// TODO: what would be handled when failure
 				return err
 			}
@@ -260,13 +260,13 @@ func SessionUnlock(namespace, repository, action string) error {
 }
 
 // push session
-func GenerateSessionID(namespace, repository string) (string, error) {
+func GenerateSessionID(namespace, repository string, version int64) (string, error) {
 	sessionLock()
 	defer sessionUnlock()
 
 	hk := hmacKey(DYSESSIONID)
 	origin := new(models.Session)
-	exists, err := origin.Read(namespace, repository)
+	exists, err := origin.Read(namespace, repository, version)
 	if err != nil {
 		return "", err
 	}
@@ -299,7 +299,7 @@ func GenerateSessionID(namespace, repository string) (string, error) {
 	}
 	fmt.Printf("\n #### mabin GetSessionID 000: %v \n", err)
 
-	if err := current.Save(namespace, repository); err != nil {
+	if err := current.Save(namespace, repository, version); err != nil {
 		return "", err
 	}
 
@@ -307,7 +307,7 @@ func GenerateSessionID(namespace, repository string) (string, error) {
 }
 
 // push session
-func ValidateSessionID(namespace, repository, sessionid string) error {
+func ValidateSessionID(namespace, repository, sessionid string, version int64) error {
 	hk := hmacKey(DYSESSIONID)
 	s, err := hk.unpackUploadSession(sessionid)
 	if err != nil {
@@ -322,7 +322,7 @@ func ValidateSessionID(namespace, repository, sessionid string) error {
 	//defer SessionUnlock()
 
 	current := new(models.Session)
-	if exists, err := current.Read(namespace, repository); err != nil {
+	if exists, err := current.Read(namespace, repository, version); err != nil {
 		return err
 	} else if !exists {
 		return fmt.Errorf("not found repository %v/%v", namespace, repository)
@@ -347,12 +347,12 @@ func ValidateSessionID(namespace, repository, sessionid string) error {
 }
 
 // push session
-func ReleaseSessionID(namespace, repository string) error {
+func ReleaseSessionID(namespace, repository string, version int64) error {
 	sessionLock()
 	defer sessionUnlock()
 
 	current := new(models.Session)
-	if exists, err := current.Read(namespace, repository); err != nil {
+	if exists, err := current.Read(namespace, repository, version); err != nil {
 		return err
 	} else if !exists {
 		return fmt.Errorf("not found repository %v/%v", namespace, repository)

@@ -163,8 +163,28 @@ func HeadBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 // @ResponseHeaders Location: /v2/<name>/blobs/uploads/<uuid>
 // @ResponseHeaders Range: 0-0
 func PostBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
+	var respcode int
+
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
+
+	sessionid, err := module.GenerateSessionID(namespace, repository, setting.DOCKERAPIV2)
+	if err != nil {
+		message := fmt.Sprintf("Failed to get upload UUID %s/%s", namespace, repository)
+		log.Errorf("%s: %v", message, err.Error())
+
+		respcode = http.StatusInternalServerError
+		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
+		return respcode, result
+	}
+
+	defer func() {
+		fmt.Printf("\n #### mabin PostBlobsV2Handler 000: respcode=%v \n", respcode)
+		if respcode != http.StatusAccepted && respcode != http.StatusCreated {
+			module.ReleaseSessionID(namespace, repository, setting.DOCKERAPIV2)
+		}
+	}()
+
 	from := ctx.Query("from")
 	mount := ctx.Query("mount")
 	u := module.NewURLFromRequest(ctx.Req.Request)
@@ -178,7 +198,7 @@ func PostBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	name := namespace + "/" + repository
 	uuid, _ := UUID.NewUUID()
 	uuid = utils.MD5(uuid)
-	state := utils.MD5(fmt.Sprintf("%s/%d", name, time.Now().UnixNano()/int64(time.Millisecond)))
+	//state := utils.MD5(fmt.Sprintf("%s/%d", name, time.Now().UnixNano()/int64(time.Millisecond)))
 
 	result, _ := json.Marshal(map[string]string{})
 
@@ -190,10 +210,10 @@ func PostBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		return http.StatusCreated, result
 	}
-	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", u.Scheme, u.Host, name, uuid, state)
+	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", u.Scheme, u.Host, name, uuid, sessionid)
 
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	ctx.Resp.Header().Set("Docker-Upload-Uuid", uuid)
+	ctx.Resp.Header().Set("Docker-Upload-Uuid", sessionid)
 	ctx.Resp.Header().Set("Location", random)
 	ctx.Resp.Header().Set("Range", "0-0")
 
@@ -218,8 +238,29 @@ func PostBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 // @ResponseHeaders Location: /v2/<name>/blobs/uploads/<uuid>
 // @ResponseHeaders Range: 0-0
 func PatchBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
+	var respcode int
+
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
+
+	defer func() {
+		fmt.Printf("\n #### mabin PatchBlobsV2Handler 000: respcode=%v \n", respcode)
+		if respcode != http.StatusAccepted {
+			module.ReleaseSessionID(namespace, repository, setting.DOCKERAPIV2)
+		}
+	}()
+
+	// TODO: where to get sessionid, and error code must be checked
+	sessionid := ctx.Req.Header.Get("Docker-Upload-Uuid")
+	if err := module.ValidateSessionID(namespace, repository, sessionid, setting.DOCKERAPIV2); err != nil {
+		message := fmt.Sprintf("%v", err)
+		log.Error(message)
+
+		respcode = http.StatusAccepted
+		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, sessionid)
+		return respcode, result
+	}
+
 	u := module.NewURLFromRequest(ctx.Req.Request)
 
 	name := namespace + "/" + repository
@@ -252,8 +293,8 @@ func PatchBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusInternalServerError, result
 	}
 
-	state := utils.MD5(fmt.Sprintf("%s/%d", name, time.Now().UnixNano()/int64(time.Millisecond)))
-	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", u.Scheme, u.Host, name, uuid, state)
+	//state := utils.MD5(fmt.Sprintf("%s/%d", name, time.Now().UnixNano()/int64(time.Millisecond)))
+	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", u.Scheme, u.Host, name, uuid, sessionid)
 
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	ctx.Resp.Header().Set("Docker-Upload-Uuid", uuid)
@@ -282,8 +323,23 @@ func PatchBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 // @ResponseHeaders Docker-Content-Digest: <digest>
 // @ResponseHeaders Location: /v2/<name>/blobs/uploads/<digest>
 func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
+	var respcode int
+
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
+
+	defer module.ReleaseSessionID(namespace, repository, setting.DOCKERAPIV2)
+
+	sessionid := ctx.Req.Header.Get("Docker-Upload-Uuid")
+	if err := module.ValidateSessionID(namespace, repository, sessionid, setting.DOCKERAPIV2); err != nil {
+		message := fmt.Sprintf("%v", err)
+		log.Error(message)
+
+		respcode = http.StatusBadRequest
+		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, sessionid)
+		return respcode, result
+	}
+
 	u := module.NewURLFromRequest(ctx.Req.Request)
 
 	name := namespace + "/" + repository

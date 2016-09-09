@@ -308,7 +308,7 @@ func AppGetFileV1Handler(ctx *macaron.Context) int {
 	namespace := ctx.Params(":namespace")
 	repository := ctx.Params(":repository")
 
-	if err := module.SessionLock(namespace, repository, "pull"); err != nil {
+	if err := module.SessionLock(namespace, repository, "pull", setting.APPAPIV1); err != nil {
 		fmt.Printf("\n #### mabin AppGetFileV1Handler 000: %v \n", err)
 		message := fmt.Sprintf("Failed to get repository file %s/%s", namespace, repository)
 		log.Errorf("%s: %v", message, err.Error())
@@ -317,7 +317,7 @@ func AppGetFileV1Handler(ctx *macaron.Context) int {
 		ctx.Resp.Write(result)
 		return http.StatusConflict
 	}
-	defer module.SessionUnlock(namespace, repository, "pull")
+	defer module.SessionUnlock(namespace, repository, "pull", setting.APPAPIV1)
 
 	system := ctx.Params(":os")
 	arch := ctx.Params(":arch")
@@ -419,7 +419,7 @@ func AppGetManifestsV1Handler(ctx *macaron.Context) (int, []byte) {
 	namespace := ctx.Params(":namespace")
 	repository := ctx.Params(":repository")
 
-	if err := module.SessionLock(namespace, repository, "pull"); err != nil {
+	if err := module.SessionLock(namespace, repository, "pull", setting.APPAPIV1); err != nil {
 		fmt.Printf("\n #### mabin AppGetManifestsV1Handler 000: %v \n", err)
 		message := fmt.Sprintf("Failed to get repository manifest %s/%s", namespace, repository)
 		log.Errorf("%s: %v", message, err.Error())
@@ -427,7 +427,7 @@ func AppGetManifestsV1Handler(ctx *macaron.Context) (int, []byte) {
 		result, _ := module.ReportError(module.DENIED, message, err.Error())
 		return http.StatusConflict, result
 	}
-	defer module.SessionUnlock(namespace, repository, "pull")
+	defer module.SessionUnlock(namespace, repository, "pull", setting.APPAPIV1)
 
 	system := ctx.Params(":os")
 	arch := ctx.Params(":arch")
@@ -590,7 +590,7 @@ func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 	//host := ctx.Req.Header.Get("Host")
 	//authorization := ctx.Req.Header.Get("Authorization")
 
-	sessionid, err := module.GenerateSessionID(namespace, repository)
+	sessionid, err := module.GenerateSessionID(namespace, repository, setting.APPAPIV1)
 	if err != nil {
 		message := fmt.Sprintf("Failed to get App upload UUID %s/%s", namespace, repository)
 		log.Errorf("%s: %v", message, err.Error())
@@ -603,7 +603,7 @@ func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 	defer func() {
 		fmt.Printf("\n #### mabin AppPostV1Handler 000: respcode=%v \n", respcode)
 		if respcode != http.StatusAccepted {
-			module.ReleaseSessionID(namespace, repository)
+			module.ReleaseSessionID(namespace, repository, setting.APPAPIV1)
 		}
 	}()
 
@@ -661,12 +661,12 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	defer func() {
 		fmt.Printf("\n #### mabin AppPutFileV1Handler 000: respcode=%v \n", respcode)
 		if respcode != http.StatusCreated {
-			module.ReleaseSessionID(namespace, repository)
+			module.ReleaseSessionID(namespace, repository, setting.APPAPIV1)
 		}
 	}()
 
 	sessionid := ctx.Req.Header.Get("App-Upload-UUID")
-	if err := module.ValidateSessionID(namespace, repository, sessionid); err != nil {
+	if err := module.ValidateSessionID(namespace, repository, sessionid, setting.APPAPIV1); err != nil {
 		message := fmt.Sprintf("%v", err)
 		log.Error(message)
 
@@ -866,12 +866,12 @@ func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
 	defer func() {
 		fmt.Printf("\n #### mabin AppPutManifestV1Handler 000: respcode=%v \n", respcode)
 		if respcode != http.StatusCreated {
-			module.ReleaseSessionID(namespace, repository)
+			module.ReleaseSessionID(namespace, repository, setting.APPAPIV1)
 		}
 	}()
 
 	sessionid := ctx.Req.Header.Get("App-Upload-UUID")
-	if err := module.ValidateSessionID(namespace, repository, sessionid); err != nil {
+	if err := module.ValidateSessionID(namespace, repository, sessionid, setting.APPAPIV1); err != nil {
 		message := fmt.Sprintf("%v", err)
 		log.Error(message)
 
@@ -955,10 +955,10 @@ func AppPatchFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	namespace := ctx.Params(":namespace")
 	repository := ctx.Params(":repository")
 
-	defer module.ReleaseSessionID(namespace, repository)
+	defer module.ReleaseSessionID(namespace, repository, setting.APPAPIV1)
 
 	sessionid := ctx.Req.Header.Get("App-Upload-UUID")
-	if err := module.ValidateSessionID(namespace, repository, sessionid); err != nil {
+	if err := module.ValidateSessionID(namespace, repository, sessionid, setting.APPAPIV1); err != nil {
 		message := fmt.Sprintf("%v", err)
 		log.Error(message)
 
@@ -1010,7 +1010,7 @@ func AppDeleteFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
 
-	if err := module.SessionLock(namespace, repository, "delete"); err != nil {
+	if err := module.SessionLock(namespace, repository, "delete", setting.APPAPIV1); err != nil {
 		fmt.Printf("\n #### mabin AppDeleteFileV1Handler 000: %v \n", err)
 		message := fmt.Sprintf("Failed to delete repository file %s/%s", namespace, repository)
 		log.Errorf("%s: %v", message, err.Error())
@@ -1018,7 +1018,7 @@ func AppDeleteFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		result, _ := module.ReportError(module.DENIED, message, err.Error())
 		return http.StatusConflict, result
 	}
-	defer module.SessionUnlock(namespace, repository, "delete")
+	defer module.SessionUnlock(namespace, repository, "delete", setting.APPAPIV1)
 
 	system := ctx.Params(":os")
 	arch := ctx.Params(":arch")

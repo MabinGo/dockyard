@@ -352,21 +352,22 @@ type Session struct {
 	Id         int64     `json:"id" gorm:"primary_key"`
 	Namespace  string    `json:"namespace" sql:"not null;type:varchar(255)"`
 	Repository string    `json:"repository" sql:"not null;type:varchar(255)"`
+	Version    int64     `json:"version" sql:"default:0"`
 	UUID       string    `json:"uuid" sql:"not null;type:varchar(128)"`
-	Locked     int64     `json:"-" sql:"default:false"`
+	Locked     int64     `json:"-" sql:"default:0"`
 	CreatedAt  time.Time `json:"create_at" sql:""`
 	//Operator   string    `json:"operator" sql:"type:varchar(255)"`
 	//Action string `json:"action" sql:"not null;type:varchar(32)"`
 }
 
 func (s *Session) AddUniqueIndex() error {
-	if err := db.Instance.AddUniqueIndex(s, "idx_session_namespace_repository", "namespace", "repository"); err != nil {
-		return fmt.Errorf("create unique index idx_session_namespace_repository error:" + err.Error())
+	if err := db.Instance.AddUniqueIndex(s, "idx_session_namespace_repository_version", "namespace", "repository", "version"); err != nil {
+		return fmt.Errorf("create unique index idx_session_namespace_repository_version error:" + err.Error())
 	}
 	return nil
 }
 
-func (s *Session) IsExist() (bool, error) {
+func (s *Session) isExist() (bool, error) {
 	if records, err := db.Instance.Count(s); err != nil {
 		return false, err
 	} else if records > int64(0) {
@@ -375,10 +376,10 @@ func (s *Session) IsExist() (bool, error) {
 	return false, nil
 }
 
-func (s *Session) Save(namespace, repository string) error {
+func (s *Session) Save(namespace, repository string, version int64) error {
 	condition := new(Session)
-	condition.Namespace, condition.Repository = namespace, repository
-	exists, err := condition.IsExist()
+	condition.Namespace, condition.Repository, condition.Version = namespace, repository, version
+	exists, err := condition.isExist()
 	if err != nil {
 		return err
 	}
@@ -393,8 +394,8 @@ func (s *Session) Save(namespace, repository string) error {
 	return err
 }
 
-func (s *Session) Read(namespace, repository string) (bool, error) {
-	s.Namespace, s.Repository = namespace, repository
+func (s *Session) Read(namespace, repository string, version int64) (bool, error) {
+	s.Namespace, s.Repository, s.Version = namespace, repository, version
 	if records, err := db.Instance.Count(s); err != nil {
 		return false, err
 	} else if records > int64(0) {
