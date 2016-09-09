@@ -342,23 +342,21 @@ func (i *ArtifactV1) QueryScope(results interface{}, parameters ...string) error
 	return nil
 }
 
-/*
 func (i *ArtifactV1) FreeLock() error {
 	// i.Locked = 0
 	// return db.Instance.Update(i)
 	return db.Instance.UpdateField(i, "locked", 0)
 }
-*/
 
 type Session struct {
 	Id         int64     `json:"id" gorm:"primary_key"`
 	Namespace  string    `json:"namespace" sql:"not null;type:varchar(255)"`
 	Repository string    `json:"repository" sql:"not null;type:varchar(255)"`
+	UUID       string    `json:"uuid" sql:"not null;type:varchar(128)"`
 	Locked     int64     `json:"-" sql:"default:false"`
 	CreatedAt  time.Time `json:"create_at" sql:""`
 	//Operator   string    `json:"operator" sql:"type:varchar(255)"`
-	//UUID       string    `json:"uuid" sql:"not null;type:varchar(128)"`
-	//Action     string    `json:"action" sql:"not null;type:varchar(32)"`
+	//Action string `json:"action" sql:"not null;type:varchar(32)"`
 }
 
 func (s *Session) AddUniqueIndex() error {
@@ -377,7 +375,9 @@ func (s *Session) IsExist() (bool, error) {
 	return false, nil
 }
 
-func (s *Session) Save(condition *Session) error {
+func (s *Session) Save(namespace, repository string) error {
+	condition := new(Session)
+	condition.Namespace, condition.Repository = namespace, repository
 	exists, err := condition.IsExist()
 	if err != nil {
 		return err
@@ -393,7 +393,8 @@ func (s *Session) Save(condition *Session) error {
 	return err
 }
 
-func (s *Session) Read() (bool, error) {
+func (s *Session) Read(namespace, repository string) (bool, error) {
+	s.Namespace, s.Repository = namespace, repository
 	if records, err := db.Instance.Count(s); err != nil {
 		return false, err
 	} else if records > int64(0) {
@@ -402,6 +403,6 @@ func (s *Session) Read() (bool, error) {
 	return false, nil
 }
 
-func (s *Session) UpdateLockState(value int64) error {
-	return db.Instance.UpdateField(s, "Locked", value)
+func (s *Session) UpdateSessionLock(value int64) error {
+	return db.Instance.UpdateField(s, "locked", value)
 }

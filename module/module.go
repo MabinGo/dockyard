@@ -93,129 +93,7 @@ func GetLayerPath(imageId, layerfile string, apiversion int64) string {
 	return fmt.Sprintf("%v/%v/%v/%v", setting.DockyardPath, Apis[apiversion], imageId, layerfile)
 }
 
-type hmacKey string
-
-var DYSESSIONID = "dockyardsessionid"
-
-var (
-	UNLOCK = 0
-	LOCK   = 1
-)
-
-var StateLock sync.RWMutex
-
-func SessionLock() {
-	StateLock.Lock()
-}
-
-func SessionUnlock() {
-	StateLock.Unlock()
-}
-
-func IsSessionActive(namespace, repository string) (bool, error) {
-	SessionLock()
-	defer SessionUnlock()
-	current := new(models.Session)
-	current.Namespace, current.Repository = namespace, repository
-	if exists, err := current.Read(); err != nil {
-		return false, err
-	} else if !exists {
-		return false, fmt.Errorf("not found repository %v/%v", namespace, repository)
-	} else {
-
-	}
-
-	return true, nil
-}
-
-func GetSessionID(namespace, repository string) (string, error) {
-	SessionLock()
-	defer SessionUnlock()
-
-	hk := hmacKey(DYSESSIONID)
-	origin := new(models.Session)
-	origin.Namespace, origin.Repository = namespace, repository
-	exists, err := origin.Read()
-	if err != nil {
-		return "", err
-	}
-
-	if exists {
-		if ori.Locked == LOCK {
-			return "", fmt.Errorf("%v/%v is busy", namespace, repository)
-		} else {
-			origin.Locked = LOCK
-			sessionid, err := hk.packUploadState(*origin)
-			if err != nil {
-				return "", err
-			}
-
-			if err := origin.UpdateLockState(LOCK); err != nil {
-				return err
-			}
-			return sessionid, nil
-		}
-	}
-
-	current := new(models.Session)
-	current.Namespace = namespace
-	current.Repository = repository
-	current.Locked = LOCK
-
-	sessionid, err := hk.packUploadState(*current)
-	if err != nil {
-		return "", err
-	}
-	fmt.Printf("\n #### mabin 000: sessionid %v \n", err)
-
-	tmp := new(models.Session)
-	tmp.Namespace, tmp.Repository = namespace, repository
-	*tmp = *current
-	if err := current.Save(tmp); err != nil {
-		return "", err
-	}
-
-	return sessionid, nil
-}
-
-func ValidateSessionID(namespace, repository, sessionid string) error {
-	hk := hmacKey(DYSESSIONID)
-	session, err := hk.unpackUploadState(sessionid)
-	if err != nil {
-		return err
-	}
-
-	if (session.Namespace != namespace) || (session.Repository != repository) {
-		return fmt.Errorf("mismatch repository %v/%v", namespace, repository)
-	}
-
-	SessionLock()
-	defer SessionUnlock()
-	current := new(models.Session)
-	current.Namespace, current.Repository = namespace, repository
-	if exists, err := current.Read(); err != nil {
-		return err
-	} else if !exists {
-		return fmt.Errorf("not found repository %v/%v", namespace, repository)
-	}
-
-	if current.Locked != session.Locked {
-		return fmt.Errorf("invalid session lock state %v", session.Locked)
-	}
-
-	if current.Locked == LOCK {
-		return fmt.Errorf("%v/%v is busy", namespace, repository)
-	} else if current.Locked == UNLOCK {
-		// TODO:
-		if err := current.UpdateLockState(LOCK); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (hk hmacKey) unpackUploadState(sessionid string) (models.Session, error) {
+func (hk hmacKey) unpackUploadSession(sessionid string) (models.Session, error) {
 	var session models.Session
 
 	content, err := base64.URLEncoding.DecodeString(sessionid)
@@ -243,7 +121,7 @@ func (hk hmacKey) unpackUploadState(sessionid string) (models.Session, error) {
 	return session, nil
 }
 
-func (hk hmacKey) packUploadState(lus models.Session) (string, error) {
+func (hk hmacKey) packUploadSession(lus models.Session) (string, error) {
 	mac := hmac.New(sha256.New, []byte(hk))
 	p, err := json.Marshal(lus)
 	if err != nil {
@@ -252,4 +130,242 @@ func (hk hmacKey) packUploadState(lus models.Session) (string, error) {
 
 	mac.Write(p)
 	return base64.URLEncoding.EncodeToString(append(mac.Sum(nil), p...)), nil
+}
+
+type hmacKey string
+
+var DYSESSIONID = "dockyardsessionid"
+
+var StateLock sync.RWMutex
+
+func sessionLock() {
+	StateLock.Lock()
+}
+
+func sessionUnlock() {
+	StateLock.Unlock()
+}
+
+func GetAction(method string) string {
+	switch method {
+	case "POST", "PUT", "PATCH":
+		return "push"
+	case "HEAD", "GET":
+		return "pull"
+	case "DELETE":
+		return "delete"
+	default:
+		return ""
+	}
+}
+
+func SessionLock(namespace, repository, action string) error {
+	sessionLock()
+	defer sessionUnlock()
+	/*
+		uuid, err := uuid.NewUUID()
+		if err != nil {
+			return "", err
+		}
+	*/
+	current := new(models.Session)
+	exists, err := current.Read(namespace, repository)
+	if err != nil {
+		return err
+	}
+	switch action {
+	case "pull":
+		if !exists {
+			current.Namespace = namespace
+			current.Repository = repository
+			//current.UUID = uuid
+			current.Locked++
+			if err := current.Save(namespace, repository); err != nil {
+				// TODO: what would be handled when failure
+				return err
+			}
+		} else {
+			if current.Locked < 0 {
+				return fmt.Errorf("%v/%v is busy", namespace, repository)
+			} else {
+				current.Locked++
+				if err := current.Save(namespace, repository); err != nil {
+					// TODO: what would be handled when failure
+					return err
+				}
+			}
+		}
+	case "delete":
+		if !exists {
+			current.Namespace = namespace
+			current.Repository = repository
+			//current.UUID = uuid
+			current.Locked = -1
+			if err := current.Save(namespace, repository); err != nil {
+				// TODO: what would be handled when failure
+				return err
+			}
+		} else {
+			if current.Locked != 0 {
+				return fmt.Errorf("%v/%v is busy", namespace, repository)
+			} else {
+				current.Locked = -1
+				if err := current.Save(namespace, repository); err != nil {
+					// TODO: what would be handled when failure
+					return err
+				}
+			}
+		}
+	default:
+		return fmt.Errorf("bad action %v", action)
+	}
+
+	return nil
+}
+
+func SessionUnlock(namespace, repository, action string) error {
+	sessionLock()
+	defer sessionUnlock()
+
+	current := new(models.Session)
+	exists, err := current.Read(namespace, repository)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		switch action {
+		case "pull":
+			if current.Locked > 0 {
+				current.Locked--
+				if err := current.Save(namespace, repository); err != nil {
+					// TODO: what would be handled when failure
+					return err
+				}
+			} else {
+				return fmt.Errorf("%v/%v is busy", namespace, repository)
+			}
+		case "delete":
+			current.Locked = 0
+			if err := current.Save(namespace, repository); err != nil {
+				// TODO: what would be handled when failure
+				return err
+			}
+		default:
+			return fmt.Errorf("bad action %v", action)
+		}
+	}
+
+	return nil
+}
+
+// push session
+func GenerateSessionID(namespace, repository string) (string, error) {
+	sessionLock()
+	defer sessionUnlock()
+
+	hk := hmacKey(DYSESSIONID)
+	origin := new(models.Session)
+	exists, err := origin.Read(namespace, repository)
+	if err != nil {
+		return "", err
+	}
+
+	uuid, err := uuid.NewUUID()
+	if err != nil {
+		return "", err
+	}
+
+	current := new(models.Session)
+	//if namespace/repository is existed, it means concurrent
+	if exists {
+		if (origin.Locked == -1) || (origin.Locked > 0) {
+			return "", fmt.Errorf("%v/%v is busy", namespace, repository)
+		} else {
+			origin.Locked = -1
+			origin.UUID = uuid
+			*current = *origin
+		}
+	} else { //if it is not existed, new create
+		current.Namespace = namespace
+		current.Repository = repository
+		current.UUID = uuid
+		current.Locked = -1
+	}
+
+	sessionid, err := hk.packUploadSession(*current)
+	if err != nil {
+		return "", err
+	}
+	fmt.Printf("\n #### mabin GetSessionID 000: %v \n", err)
+
+	if err := current.Save(namespace, repository); err != nil {
+		return "", err
+	}
+
+	return sessionid, nil
+}
+
+// push session
+func ValidateSessionID(namespace, repository, sessionid string) error {
+	hk := hmacKey(DYSESSIONID)
+	s, err := hk.unpackUploadSession(sessionid)
+	if err != nil {
+		return err
+	}
+
+	if (s.Namespace != namespace) || (s.Repository != repository) {
+		return fmt.Errorf("bad App-Upload-UUID, mismatch repository %v/%v", namespace, repository)
+	}
+
+	//SessionLock()
+	//defer SessionUnlock()
+
+	current := new(models.Session)
+	if exists, err := current.Read(namespace, repository); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("not found repository %v/%v", namespace, repository)
+	}
+
+	// TODO: identify the same session
+	if (current.Locked != s.Locked) || (current.UUID != s.UUID) {
+		return fmt.Errorf("%v/%v is busy", namespace, repository)
+	}
+	/*
+		if (current.Locked == -1) || (current.Locked > 0) {
+			return fmt.Errorf("%v/%v is busy", namespace, repository)
+		} else if current.Locked == 0 {
+			// TODO:
+			if err := current.UpdateLockState(-1); err != nil {
+				// TODO: what would be handled when failure
+				return err
+			}
+		}
+	*/
+	return nil
+}
+
+// push session
+func ReleaseSessionID(namespace, repository string) error {
+	sessionLock()
+	defer sessionUnlock()
+
+	current := new(models.Session)
+	if exists, err := current.Read(namespace, repository); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("not found repository %v/%v", namespace, repository)
+	}
+
+	current.Locked = 0
+	if err := current.UpdateSessionLock(current.Locked); err != nil {
+		// TODO: lock should be recycled when release failure
+		return err
+	}
+
+	// TODO: delete session table
+	// ...
+
+	return nil
 }

@@ -305,23 +305,28 @@ func AppGetListAppV1Handler(ctx *macaron.Context) (int, []byte) {
 // @ResponseHeaders Content-Range: bytes <start>-<end>/<size>
 // @ResponseHeaders Content-Type: application/octet-stream
 func AppGetFileV1Handler(ctx *macaron.Context) int {
-	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
-	operatingSystem := ctx.Params(":os")
-	architecture := ctx.Params(":arch")
+	repository := ctx.Params(":repository")
+
+	if err := module.SessionLock(namespace, repository, "pull"); err != nil {
+		fmt.Printf("\n #### mabin AppGetFileV1Handler 000: %v \n", err)
+		message := fmt.Sprintf("Failed to get repository file %s/%s", namespace, repository)
+		log.Errorf("%s: %v", message, err.Error())
+
+		result, _ := module.ReportError(module.DENIED, message, err.Error())
+		ctx.Resp.Write(result)
+		return http.StatusConflict
+	}
+	defer module.SessionUnlock(namespace, repository, "pull")
+
+	system := ctx.Params(":os")
+	arch := ctx.Params(":arch")
 	appname := ctx.Params(":app")
 	tag := ctx.Params(":tag")
 	//host := ctx.Req.Header.Get("Host")
 	//authorization := ctx.Req.Header.Get("Authorization")
 	if tag == "" {
 		tag = "latest"
-	}
-
-	current.Namespace, current.Repository = namespace, repository
-	if exists, err := current.Read(); err != nil {
-		return err
-	} else if !exists {
-		return fmt.Errorf("not found repository %v/%v", namespace, repository)
 	}
 
 	a := new(models.AppV1)
@@ -343,24 +348,26 @@ func AppGetFileV1Handler(ctx *macaron.Context) int {
 	}
 
 	i := new(models.ArtifactV1)
-	i.AppV1, i.OS, i.Arch, i.App, i.Tag = a.Id, operatingSystem, architecture, appname, tag
+	i.AppV1, i.OS, i.Arch, i.App, i.Tag = a.Id, system, arch, appname, tag
 	if exists, err := i.Read(); err != nil {
-		if strings.Contains(err.Error(), "source is busy") {
-			message := fmt.Sprintf("Failed to get app description %s/%s/%s", operatingSystem, architecture, appname)
-			log.Errorf("%s: %v", message, err.Error())
+		/*
+			if strings.Contains(err.Error(), "source is busy") {
+				message := fmt.Sprintf("Failed to get app description %s/%s/%s", os, arch, appname)
+				log.Errorf("%s: %v", message, err.Error())
 
-			result, _ := module.ReportError(module.DENIED, message, err.Error())
-			ctx.Resp.Write(result)
-			return http.StatusConflict
-		}
-		message := fmt.Sprintf("Failed to get app description %s/%s/%s", operatingSystem, architecture, appname)
+				result, _ := module.ReportError(module.DENIED, message, err.Error())
+				ctx.Resp.Write(result)
+				return http.StatusConflict
+			}
+		*/
+		message := fmt.Sprintf("Failed to get app description %s/%s/%s", system, arch, appname)
 		log.Errorf("%s: %v", message, err.Error())
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 		ctx.Resp.Write(result)
 		return http.StatusInternalServerError
 	} else if !exists {
-		message := fmt.Sprintf("Not found app: %s/%s/%s", operatingSystem, architecture, appname)
+		message := fmt.Sprintf("Not found app: %s/%s/%s", system, arch, appname)
 		log.Error(message)
 
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, nil)
@@ -378,11 +385,13 @@ func AppGetFileV1Handler(ctx *macaron.Context) int {
 		return http.StatusInternalServerError
 	}
 	defer fd.Close()
-	http.ServeContent(ctx.Resp, ctx.Req.Request, i.BlobSum, time.Now(), fd)
 
 	ctx.Resp.Header().Set("Content-Type", "application/octet-stream")
 	ctx.Resp.Header().Set("Content-Range", fmt.Sprintf("0-%v", i.Size-1))
 	ctx.Resp.Header().Set("Content-Length", fmt.Sprintf("%v", i.Size))
+
+	http.ServeContent(ctx.Resp, ctx.Req.Request, i.BlobSum, time.Now(), fd)
+
 	return http.StatusOK
 }
 
@@ -407,10 +416,21 @@ func AppGetFileV1Handler(ctx *macaron.Context) int {
 // @ResponseHeaders Content-Range: bytes <start>-<end>/<size>
 // @ResponseHeaders Content-Type: application/octet-stream
 func AppGetManifestsV1Handler(ctx *macaron.Context) (int, []byte) {
-	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
-	operatingSystem := ctx.Params(":os")
-	architecture := ctx.Params(":arch")
+	repository := ctx.Params(":repository")
+
+	if err := module.SessionLock(namespace, repository, "pull"); err != nil {
+		fmt.Printf("\n #### mabin AppGetManifestsV1Handler 000: %v \n", err)
+		message := fmt.Sprintf("Failed to get repository manifest %s/%s", namespace, repository)
+		log.Errorf("%s: %v", message, err.Error())
+
+		result, _ := module.ReportError(module.DENIED, message, err.Error())
+		return http.StatusConflict, result
+	}
+	defer module.SessionUnlock(namespace, repository, "pull")
+
+	system := ctx.Params(":os")
+	arch := ctx.Params(":arch")
 	appname := ctx.Params(":app")
 	tag := ctx.Params(":tag")
 	//host := ctx.Req.Header.Get("Host")
@@ -436,22 +456,24 @@ func AppGetManifestsV1Handler(ctx *macaron.Context) (int, []byte) {
 	}
 
 	i := new(models.ArtifactV1)
-	i.AppV1, i.OS, i.Arch, i.App, i.Tag = a.Id, operatingSystem, architecture, appname, tag
+	i.AppV1, i.OS, i.Arch, i.App, i.Tag = a.Id, system, arch, appname, tag
 	if exists, err := i.Read(); err != nil {
-		if strings.Contains(err.Error(), "source is busy") {
-			message := fmt.Sprintf("Failed to get app description %s/%s/%s", operatingSystem, architecture, appname)
-			log.Errorf("%s: %v", message, err.Error())
+		/*
+			if strings.Contains(err.Error(), "source is busy") {
+				message := fmt.Sprintf("Failed to get app description %s/%s/%s", os, arch, appname)
+				log.Errorf("%s: %v", message, err.Error())
 
-			result, _ := module.ReportError(module.DENIED, message, err.Error())
-			return http.StatusConflict, result
-		}
-		message := fmt.Sprintf("Failed to get app description %s/%s/%s", operatingSystem, architecture, appname)
+				result, _ := module.ReportError(module.DENIED, message, err.Error())
+				return http.StatusConflict, result
+			}
+		*/
+		message := fmt.Sprintf("Failed to get app description %s/%s/%s", system, arch, appname)
 		log.Errorf("%s: %v", message, err.Error())
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 		return http.StatusInternalServerError, result
 	} else if !exists {
-		message := fmt.Sprintf("Not found app: %s/%s/%s", operatingSystem, architecture, appname)
+		message := fmt.Sprintf("Not found app: %s/%s/%s", system, arch, appname)
 		log.Error(message)
 
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, nil)
@@ -561,12 +583,30 @@ func AppGetMetaSignV1Handler(ctx *macaron.Context) (int, []byte) {
 // @ResponseHeaders App-Upload-UUID: <Random UUID>
 // @ResponseHeaders Content-Type: text/plain; charset=utf-8
 func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
+	var respcode int
+
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
 	//host := ctx.Req.Header.Get("Host")
 	//authorization := ctx.Req.Header.Get("Authorization")
 
-	// sqllock
+	sessionid, err := module.GenerateSessionID(namespace, repository)
+	if err != nil {
+		message := fmt.Sprintf("Failed to get App upload UUID %s/%s", namespace, repository)
+		log.Errorf("%s: %v", message, err.Error())
+
+		respcode = http.StatusInternalServerError
+		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
+		return respcode, result
+	}
+
+	defer func() {
+		fmt.Printf("\n #### mabin AppPostV1Handler 000: respcode=%v \n", respcode)
+		if respcode != http.StatusAccepted {
+			module.ReleaseSessionID(namespace, repository)
+		}
+	}()
+
 	a := new(models.AppV1)
 	a.Namespace, a.Repository = namespace, repository
 	condition := new(models.AppV1)
@@ -575,25 +615,18 @@ func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 		message := fmt.Sprintf("Failed to save repository description %s/%s", namespace, repository)
 		log.Errorf("%s: %v", message, err.Error())
 
+		respcode = http.StatusInternalServerError
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
-		return http.StatusInternalServerError, result
+		return respcode, result
 	}
-
-	sessionid, err := module.GetSessionID(namespace, repository)
-	if err != nil {
-		message := fmt.Sprintf("Failed to get App upload UUID %s/%s", namespace, repository)
-		log.Errorf("%s: %v", message, err.Error())
-
-		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
-		return http.StatusInternalServerError, result
-	}
-	// sqlunlock
 
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	ctx.Resp.Header().Set("App-Upload-UUID", sessionid)
 
+	respcode = http.StatusAccepted
 	result, _ := json.Marshal(map[string]string{})
-	return http.StatusAccepted, result
+
+	return respcode, result
 }
 
 // @Title Upload content of application
@@ -620,22 +653,34 @@ func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 // @ResponseHeaders App-Upload-UUID: <Random UUID>
 // @ResponseHeaders Content-Type: text/plain; charset=utf-8
 func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
-	repository := ctx.Params(":repository")
+	var respcode int
+
 	namespace := ctx.Params(":namespace")
-	operatingSystem := ctx.Params(":os")
-	architecture := ctx.Params(":arch")
-	appname := ctx.Params(":app")
-	tag := ctx.Params(":tag")
-	host := ctx.Req.Request.Host
-	//authorization := ctx.Req.Header.Get("Authorization")
+	repository := ctx.Params(":repository")
+
+	defer func() {
+		fmt.Printf("\n #### mabin AppPutFileV1Handler 000: respcode=%v \n", respcode)
+		if respcode != http.StatusCreated {
+			module.ReleaseSessionID(namespace, repository)
+		}
+	}()
+
 	sessionid := ctx.Req.Header.Get("App-Upload-UUID")
 	if err := module.ValidateSessionID(namespace, repository, sessionid); err != nil {
 		message := fmt.Sprintf("%v", err)
 		log.Error(message)
 
+		respcode = http.StatusBadRequest
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, sessionid)
-		return http.StatusBadRequest, result
+		return respcode, result
 	}
+
+	system := ctx.Params(":os")
+	arch := ctx.Params(":arch")
+	appname := ctx.Params(":app")
+	tag := ctx.Params(":tag")
+	host := ctx.Req.Request.Host
+	//authorization := ctx.Req.Header.Get("Authorization")
 
 	digest := ctx.Req.Header.Get("Digest")
 	hashes := strings.Split(digest, ":")
@@ -647,8 +692,9 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		message := fmt.Sprintf("Invalid digest format %v", digest)
 		log.Error(message)
 
+		respcode = http.StatusBadRequest
 		result, _ := module.ReportError(module.DIGEST_INVALID, message, digest)
-		return http.StatusBadRequest, result
+		return respcode, result
 	}
 	sha := hashes[1]
 
@@ -658,18 +704,20 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		message := fmt.Sprintf("Failed to get repository description %s/%s", namespace, repository)
 		log.Errorf("%s: %v", message, err.Error())
 
+		respcode = http.StatusInternalServerError
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
-		return http.StatusInternalServerError, result
+		return respcode, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository: %s/%s", namespace, repository)
 		log.Error(message)
 
+		respcode = http.StatusNotFound
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, sha)
-		return http.StatusNotFound, result
+		return respcode, result
 	}
 
 	rawurl := fmt.Sprintf("%s://%s/app/v1/%s/%s/%s/%s/%s/%s", setting.ListenMode,
-		host, namespace, repository, operatingSystem, architecture, appname, tag)
+		host, namespace, repository, system, arch, appname, tag)
 	imagePath := fmt.Sprintf("%s/%s/%s", setting.DockyardPath, "app", sha)
 	appPath := fmt.Sprintf("%s/%s", imagePath, "app")
 
@@ -678,30 +726,35 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	}
 
 	i := new(models.ArtifactV1)
-	i.AppV1, i.OS, i.Arch, i.App, i.Tag = a.Id, operatingSystem, architecture, appname, tag
+	i.AppV1, i.OS, i.Arch, i.App, i.Tag = a.Id, system, arch, appname, tag
 	condition := new(models.ArtifactV1)
 	*condition = *i
 	if err := i.Save(condition); err != nil {
-		if strings.Contains(err.Error(), "source is busy") {
-			message := fmt.Sprintf("Failed to get app description %s/%s/%s", operatingSystem, architecture, appname)
-			log.Errorf("%s: %v", message, err.Error())
+		/*
+			if strings.Contains(err.Error(), "source is busy") {
+				message := fmt.Sprintf("Failed to get app description %s/%s/%s", system, arch, appname)
+				log.Errorf("%s: %v", message, err.Error())
 
-			result, _ := module.ReportError(module.DENIED, message, err.Error())
-			return http.StatusConflict, result
-		}
-		message := fmt.Sprintf("Failed to get app description %s", sha)
+				respcode = http.StatusConflict
+				result, _ := module.ReportError(module.DENIED, message, err.Error())
+				return respcode, result
+			}
+		*/
+		message := fmt.Sprintf("Failed to save app %s", sha)
 		log.Errorf("%s: %v", message, err.Error())
 
+		respcode = http.StatusInternalServerError
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
-		return http.StatusInternalServerError, result
+		return respcode, result
 	}
 
 	file, err := os.OpenFile(appPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0640)
 	if err != nil {
 		log.Error("Create app file error: %s %s", appPath, err.Error())
 
+		respcode = http.StatusBadRequest
 		result, _ := json.Marshal(map[string]string{"message": "Create .aci File Error."})
-		return http.StatusBadRequest, result
+		return respcode, result
 	}
 	defer file.Close()
 	size, err := io.Copy(file, ctx.Req.Request.Body)
@@ -709,8 +762,9 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		message := fmt.Sprintf("Failed to save app %s", appPath)
 		log.Errorf("%s: %v", message, err.Error())
 
+		respcode = http.StatusInternalServerError
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
-		return http.StatusInternalServerError, result
+		return respcode, result
 	}
 
 	/*
@@ -741,23 +795,25 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 			}
 	*/
 	var upService us.UpdateService
-	fullname := fmt.Sprintf("%s/%s/%s/%s", operatingSystem, architecture, appname, tag)
+	fullname := fmt.Sprintf("%s/%s/%s/%s", system, arch, appname, tag)
 	if err := upService.Put("app", namespace, repository, fullname, []string{sha}); err != nil {
 		message := fmt.Sprintf("Failed to create a signature for %s/%s/%s", namespace, repository, fullname)
 		log.Errorf("%s", message)
 
+		respcode = http.StatusInternalServerError
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, nil)
-		return http.StatusInternalServerError, result
+		return respcode, result
 	}
 
 	i = new(models.ArtifactV1)
-	i.AppV1, i.OS, i.Arch, i.App, i.Tag = a.Id, operatingSystem, architecture, appname, tag
+	i.AppV1, i.OS, i.Arch, i.App, i.Tag = a.Id, system, arch, appname, tag
 	if _, err := i.IsExist(); err != nil {
 		message := fmt.Sprintf("Failed to get app description %s", sha)
 		log.Errorf("%s: %v", message, err.Error())
 
+		respcode = http.StatusInternalServerError
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
-		return http.StatusInternalServerError, result
+		return respcode, result
 	}
 	blobSum := i.BlobSum
 	i.BlobSum, i.Path, i.Size, i.URL = sha, appPath, size, rawurl
@@ -765,8 +821,9 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		message := fmt.Sprintf("Failed to save app description %s", sha)
 		log.Errorf("%s: %v", message, err.Error())
 
+		respcode = http.StatusInternalServerError
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
-		return http.StatusInternalServerError, result
+		return respcode, result
 	} else if deleteBlob != "" {
 		deletePath := fmt.Sprintf("%s/%s/%s", setting.DockyardPath, "app", deleteBlob)
 		os.RemoveAll(deletePath)
@@ -775,8 +832,10 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	ctx.Resp.Header().Set("App-Upload-UUID", sessionid)
 
+	respcode = http.StatusCreated
 	result, _ := json.Marshal(map[string]string{})
-	return http.StatusCreated, result
+
+	return respcode, result
 }
 
 // @Title Upload manifest of application
@@ -799,27 +858,40 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 // @Failure 500 {string} string "internal server error, response error information"
 // @Router /app/v1/{namespace}/{repository}/{os}/{arch}/{app}/manifests/{tag} [put]
 func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
-	repository := ctx.Params(":repository")
+	var respcode int
+
 	namespace := ctx.Params(":namespace")
-	operatingSystem := ctx.Params(":os")
-	architecture := ctx.Params(":arch")
-	appname := ctx.Params(":app")
-	tag := ctx.Params(":tag")
-	//host := ctx.Req.Header.Get("Host")
-	//authorization := ctx.Req.Header.Get("Authorization")
+	repository := ctx.Params(":repository")
+
+	defer func() {
+		fmt.Printf("\n #### mabin AppPutManifestV1Handler 000: respcode=%v \n", respcode)
+		if respcode != http.StatusCreated {
+			module.ReleaseSessionID(namespace, repository)
+		}
+	}()
+
 	sessionid := ctx.Req.Header.Get("App-Upload-UUID")
 	if err := module.ValidateSessionID(namespace, repository, sessionid); err != nil {
 		message := fmt.Sprintf("%v", err)
 		log.Error(message)
 
+		respcode = http.StatusBadRequest
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, sessionid)
-		return http.StatusBadRequest, result
+		return respcode, result
 	}
 
-	digest := ctx.Req.Header.Get("Digest")
+	system := ctx.Params(":os")
+	arch := ctx.Params(":arch")
+	appname := ctx.Params(":app")
+	tag := ctx.Params(":tag")
+	//host := ctx.Req.Header.Get("Host")
+	//authorization := ctx.Req.Header.Get("Authorization")
+
 	if tag == "" {
 		tag = "latest"
 	}
+
+	digest := ctx.Req.Header.Get("Digest")
 
 	a := new(models.AppV1)
 	a.Namespace, a.Repository = namespace, repository
@@ -827,20 +899,22 @@ func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
 		message := fmt.Sprintf("Failed to get repository description %s/%s", namespace, repository)
 		log.Errorf("%s: %v", message, err.Error())
 
+		respcode = http.StatusInternalServerError
 		result, _ := module.ReportError(module.MANIFEST_INVALID, message, err.Error())
-		return http.StatusInternalServerError, result
+		return respcode, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository: %s/%s", namespace, repository)
 		log.Error(message)
 
+		respcode = http.StatusNotFound
 		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, message, digest)
-		return http.StatusNotFound, result
+		return respcode, result
 	}
 
 	manifest, _ := ctx.Req.Body().Bytes()
 
 	i := new(models.ArtifactV1)
-	i.AppV1, i.OS, i.Arch, i.App, i.Tag = a.Id, operatingSystem, architecture, appname, tag
+	i.AppV1, i.OS, i.Arch, i.App, i.Tag = a.Id, system, arch, appname, tag
 	condition := new(models.ArtifactV1)
 	*condition = *i
 	i.Manifests = string(manifest)
@@ -848,12 +922,14 @@ func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
 		message := fmt.Sprintf("Failed to save repository description %s/%s", namespace, repository)
 		log.Errorf("%s: %v", message, err.Error())
 
+		respcode = http.StatusInternalServerError
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
-		return http.StatusInternalServerError, result
+		return respcode, result
 	}
 
+	respcode = http.StatusCreated
 	result, _ := json.Marshal(map[string]string{})
-	return http.StatusCreated, result
+	return respcode, result
 }
 
 // @Title Update the status of uploading application.
@@ -874,37 +950,44 @@ func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
 // @Failure 400 {string} string "bad request, parameters or url is error, response error information"
 // @Router /app/v1/{namespace}/{repository}/{os}/{arch}/{app}/{status}/{tag} [patch]
 func AppPatchFileV1Handler(ctx *macaron.Context) (int, []byte) {
-	repository := ctx.Params(":repository")
+	var respcode int
+
 	namespace := ctx.Params(":namespace")
-	operatingSystem := ctx.Params(":os")
-	architecture := ctx.Params(":arch")
-	appname := ctx.Params(":app")
-	status := ctx.Params(":status")
-	tag := ctx.Params(":tag")
-	//host := ctx.Req.Header.Get("Host")
-	//authorization := ctx.Req.Header.Get("Authorization")
+	repository := ctx.Params(":repository")
+
+	defer module.ReleaseSessionID(namespace, repository)
+
 	sessionid := ctx.Req.Header.Get("App-Upload-UUID")
 	if err := module.ValidateSessionID(namespace, repository, sessionid); err != nil {
 		message := fmt.Sprintf("%v", err)
 		log.Error(message)
 
+		respcode = http.StatusBadRequest
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, sessionid)
-		return http.StatusBadRequest, result
+		return respcode, result
 	}
 
-	if strings.EqualFold("done", status) {
+	system := ctx.Params(":os")
+	arch := ctx.Params(":arch")
+	appname := ctx.Params(":app")
+	status := ctx.Params(":status")
+	tag := ctx.Params(":tag")
+	//host := ctx.Req.Header.Get("Host")
+	//authorization := ctx.Req.Header.Get("Authorization")
+
+	if strings.EqualFold("done", status) || strings.EqualFold("error", status) {
+		respcode = http.StatusAccepted
 		result, _ := json.Marshal(map[string]string{})
-		return http.StatusAccepted, result
-	} else if strings.EqualFold("error", status) {
-		result, _ := json.Marshal(map[string]string{})
-		return http.StatusAccepted, result
+		return respcode, result
 	}
 
-	message := fmt.Sprintf("Failed to upload app %s/%s/%s/%s", operatingSystem, architecture, appname, tag)
+	message := fmt.Sprintf("Failed to upload app %s/%s/%s/%s", system, arch, appname, tag)
 	log.Error(message)
 
+	respcode = http.StatusBadRequest
 	result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, status)
-	return http.StatusBadRequest, result
+
+	return respcode, result
 }
 
 // @Title Delete application.
@@ -926,8 +1009,19 @@ func AppPatchFileV1Handler(ctx *macaron.Context) (int, []byte) {
 func AppDeleteFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
-	operatingSystem := ctx.Params(":os")
-	architecture := ctx.Params(":arch")
+
+	if err := module.SessionLock(namespace, repository, "delete"); err != nil {
+		fmt.Printf("\n #### mabin AppDeleteFileV1Handler 000: %v \n", err)
+		message := fmt.Sprintf("Failed to delete repository file %s/%s", namespace, repository)
+		log.Errorf("%s: %v", message, err.Error())
+
+		result, _ := module.ReportError(module.DENIED, message, err.Error())
+		return http.StatusConflict, result
+	}
+	defer module.SessionUnlock(namespace, repository, "delete")
+
+	system := ctx.Params(":os")
+	arch := ctx.Params(":arch")
 	appname := ctx.Params(":app")
 	tag := ctx.Params(":tag")
 	//host := ctx.Req.Header.Get("Host")
@@ -953,16 +1047,16 @@ func AppDeleteFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	}
 
 	i := new(models.ArtifactV1)
-	i.AppV1, i.OS, i.Arch, i.App, i.Tag = a.Id, operatingSystem, architecture, appname, tag
+	i.AppV1, i.OS, i.Arch, i.App, i.Tag = a.Id, system, arch, appname, tag
 	if deleteBlob, err := i.Delete(); err != nil {
 		if strings.EqualFold(err.Error(), "record not found") {
-			message := fmt.Sprintf("Not found app: %s/%s/%s/%s", operatingSystem, architecture, appname, tag)
+			message := fmt.Sprintf("Not found app: %s/%s/%s/%s", system, arch, appname, tag)
 			log.Error(message)
 
 			result, _ := module.ReportError(module.UNKNOWN, message, nil)
 			return http.StatusNotFound, result
 		}
-		message := fmt.Sprintf("Failed to delete app %s/%s/%s", operatingSystem, architecture, appname)
+		message := fmt.Sprintf("Failed to delete app %s/%s/%s", system, arch, appname)
 		log.Errorf("%s: %v", message, err.Error())
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
@@ -973,7 +1067,7 @@ func AppDeleteFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	}
 
 	var upService us.UpdateService
-	fullname := fmt.Sprintf("%s/%s/%s/%s", operatingSystem, architecture, appname, tag)
+	fullname := fmt.Sprintf("%s/%s/%s/%s", system, arch, appname, tag)
 	if err := upService.Delete("app", namespace, repository, fullname); err != nil {
 		message := fmt.Sprintf("Failed to remove signature for %s/%s/%s", namespace, repository, fullname)
 		log.Errorf("%s", message)
