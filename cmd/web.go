@@ -30,6 +30,7 @@ import (
 	"github.com/containerops/dockyard/db"
 	"github.com/containerops/dockyard/middleware"
 	"github.com/containerops/dockyard/models"
+	"github.com/containerops/dockyard/module"
 	"github.com/containerops/dockyard/setting"
 	"github.com/containerops/dockyard/utils"
 	"github.com/containerops/dockyard/web"
@@ -65,6 +66,7 @@ func runWeb(c *cli.Context) {
 	//Set Macaron Web Middleware And Routers
 	web.SetDockyardMacaron(m)
 
+	module.RecycleSourceThread()
 	switch setting.ListenMode {
 	case "http":
 		listenaddr := fmt.Sprintf("%s:%d", c.String("address"), c.Int("port"))

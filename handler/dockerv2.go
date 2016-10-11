@@ -31,7 +31,6 @@ import (
 	"github.com/containerops/dockyard/models"
 	"github.com/containerops/dockyard/module"
 	"github.com/containerops/dockyard/setting"
-	"github.com/containerops/dockyard/updateservice"
 	"github.com/containerops/dockyard/utils"
 	"github.com/containerops/dockyard/utils/signature"
 	UUID "github.com/containerops/dockyard/utils/uuid"
@@ -43,11 +42,12 @@ import (
 // @Accept json
 // @Attention
 // @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
+// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
 // @Success 200 {string} string ""
+// @Failure 401 {string} string ""
 // @Router /v2 [get]
-// @ResponseHeaders Content-Type: application/json
-// @ResponseHeaders Docker-Distribution-Api-Version: registry/2.0
+// @ResponseHeaders "Content-Type" "application/json"
+// @ResponseHeaders "Docker-Distribution-Api-Version" "registry/2.0"
 func GetPingV2Handler(ctx *macaron.Context) (int, []byte) {
 	ctx.Resp.Header().Set("Content-Type", "application/json; charset=utf-8")
 	ctx.Resp.Header().Set("Docker-Distribution-Api-Version", "registry/2.0")
@@ -56,85 +56,70 @@ func GetPingV2Handler(ctx *macaron.Context) (int, []byte) {
 	return http.StatusOK, result
 }
 
-// @Title Get repository name list
-// @Description Retrieve a sorted, json list of repositories available in the dockyard.
-// @Accept json
-// @Attention
-// @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
-// @Success 200 {object} models.Repolist "docker repository json information, eg:{"repositories": [<name>,...]}"
-// @Failure 500 {string} string "internal server error, response error information of api server"
-// @Router /v2/_catalog [get]
-func GetCatalogV2Handler(ctx *macaron.Context) (int, []byte) {
-	r := new(models.DockerV2)
-	results := []models.DockerV2{}
-
-	if err := r.List(&results); err != nil {
-		message := fmt.Sprintf("Failed to list repositories")
-		log.Error("[REGISTRY API V2] %s: %v", message, err.Error())
-
-		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
-		return http.StatusInternalServerError, result
-	}
-
-	rl := new(models.Repolist)
-	for _, v := range results {
-		var name string
-		if v.Namespace == "" {
-			name = v.Repository
-		} else {
-			name = v.Namespace + "/" + v.Repository
-		}
-		rl.Repositories = append(rl.Repositories, name)
-	}
-
-	result, err := json.Marshal(rl)
-	if err != nil {
-		message := fmt.Sprintf("Failed to marshal appname")
-		log.Errorf("%s: %v", message, err.Error())
-
-		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
-		return http.StatusInternalServerError, result
-	}
-
-	return http.StatusOK, result
-}
-
 // @Title Head blob store
 // @Description The existence of a layer can be checked via the HEAD request to the blob store API.
 // @Accept json
 // @Attention
-// @Param namespace path string true "namespace, only numbers,letters and underscore are allowed, maxlength is 255 byte. eg: Huawei"
+// @Param namespace path string true "namespace, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: Huawei"
 // @Param repository path string true "name of repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
 // @Param digest path string true "hash of image's layer, standard sha256 hash value, contain numbers,letters,colon and xdigit, length is not less than 32. eg: sha256:XXX"
 // @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
+// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
 // @Success 200 {string} string ""
+// @Failure 401 {string} string ""
 // @Failure 404 {string} string "not found blob, response error information"
 // @Failure 500 {string} string "internal server error, response error information of api server"
 // @Router /v2/{namespace}/{repository}/blobs/{digest} [head]
-// @ResponseHeaders Content-Type: application/json
-// @ResponseHeaders Content-Type: application/octet-stream
-// @ResponseHeaders Docker-Content-Digest: <digest>
-// @ResponseHeaders Content-Length: <length>
+// @ResponseHeaders "Content-Type" "application/json"
+// @ResponseHeaders "Content-Type" "application/octet-stream"
+// @ResponseHeaders "Docker-Content-Digest" "digest"
+// @ResponseHeaders "Content-Length" "length"
 func HeadBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+	if errcode, err := module.ValidateName(namespace, repository); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
+
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
+	}
+
 	digest := ctx.Params(":digest")
+	if errcode, err := module.ValidateDigest(digest); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
+
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
+	}
+
 	tarsum := strings.Split(digest, ":")[1]
+
+	req := ctx.Req.Request
+	client := module.RemoteAddr(req)
+	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
 
 	ctx.Resp.Header().Set("Content-Type", "application/json; charset=utf-8")
 	i := new(models.DockerImageV2)
 	i.BlobSum = tarsum
 	if exists, err := i.IsExist(); err != nil {
 		message := fmt.Sprintf("Failed to get blob %s", tarsum)
-		log.Warnf("[REGISTRY API V2] %s: %v", message, err.Error())
+		log.Warnf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.DIGEST_INVALID, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found blob: %s", tarsum)
 		log.Infof("[REGISTRY API V2] %s", message)
 
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, nil)
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusNotFound, result
 	}
 
@@ -143,6 +128,9 @@ func HeadBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(i.Size))
 
 	result, _ := json.Marshal(map[string]string{})
+
+	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
+
 	return http.StatusOK, result
 }
 
@@ -150,55 +138,52 @@ func HeadBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 // @Description All layer uploads use two steps to manage the upload process, this is first step.
 // @Accept json
 // @Attention
-// @Param namespace path string true "namespace, only numbers,letters and underscore are allowed, maxlength is 255 byte. eg: Huawei"
+// @Param namespace path string true "namespace, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: Huawei"
 // @Param repository path string true "name of repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
 // @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
+// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
 // @Success 201 {string} string ""
 // @Success 202 {string} string ""
+// @Failure 400 {string} string "bad request, response error information"
+// @Failure 401 {string} string ""
 // @Router /v2/{namespace}/{repository}/blobs/uploads [post]
-// @ResponseHeaders Content-Type: text/plain; charset=utf-8
-// @ResponseHeaders Docker-Content-Digest: <digest>
-// @ResponseHeaders Docker-Upload-Uuid: <uuid>
-// @ResponseHeaders Location: /v2/<name>/blobs/uploads/<uuid>
-// @ResponseHeaders Range: 0-0
+// @ResponseHeaders "Content-Type" "text/plain; charset=utf-8"
+// @ResponseHeaders "Docker-Content-Digest" "digest"
+// @ResponseHeaders "Docker-Upload-Uuid" "uuid"
+// @ResponseHeaders "Location" "/v2/{name}/blobs/uploads/{uuid}""
+// @ResponseHeaders "Range" "0-0"
 func PostBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
-	var respcode int
-
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
+	if errcode, err := module.ValidateName(namespace, repository); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
 
-	sessionid, err := module.GenerateSessionID(namespace, repository, setting.DOCKERAPIV2)
-	if err != nil {
-		message := fmt.Sprintf("Failed to get upload UUID %s/%s", namespace, repository)
-		log.Errorf("%s: %v", message, err.Error())
-
-		respcode = http.StatusInternalServerError
-		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
-		return respcode, result
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
 	}
-
-	defer func() {
-		fmt.Printf("\n #### mabin PostBlobsV2Handler 000: respcode=%v \n", respcode)
-		if respcode != http.StatusAccepted && respcode != http.StatusCreated {
-			module.ReleaseSessionID(namespace, repository, setting.DOCKERAPIV2)
-		}
-	}()
 
 	from := ctx.Query("from")
 	mount := ctx.Query("mount")
-	u := module.NewURLFromRequest(ctx.Req.Request)
+
+	req := ctx.Req.Request
+	client := module.RemoteAddr(req)
+	u := module.NewURLFromRequest(req)
+
+	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
 
 	if mount != "" && !validate.IsDigestValid(mount) {
 		detail := fmt.Sprintf("%s", mount)
 		result, _ := module.ReportError(module.DIGEST_INVALID, "Invalid digest format", detail)
+		message := "Invalid digest format"
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 		return http.StatusBadRequest, result
 	}
 
 	name := namespace + "/" + repository
 	uuid, _ := UUID.NewUUID()
 	uuid = utils.MD5(uuid)
-	//state := utils.MD5(fmt.Sprintf("%s/%d", name, time.Now().UnixNano()/int64(time.Millisecond)))
+	state := utils.MD5(fmt.Sprintf("%s/%d", name, time.Now().UnixNano()/int64(time.Millisecond)))
 
 	result, _ := json.Marshal(map[string]string{})
 
@@ -208,14 +193,18 @@ func PostBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 		ctx.Resp.Header().Set("Docker-Content-Digest", mount)
 		ctx.Resp.Header().Set("Location", random)
 
+		audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
+
 		return http.StatusCreated, result
 	}
-	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", u.Scheme, u.Host, name, uuid, sessionid)
+	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", u.Scheme, u.Host, name, uuid, state)
 
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	ctx.Resp.Header().Set("Docker-Upload-Uuid", sessionid)
+	ctx.Resp.Header().Set("Docker-Upload-Uuid", uuid)
 	ctx.Resp.Header().Set("Location", random)
 	ctx.Resp.Header().Set("Range", "0-0")
+
+	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return http.StatusAccepted, result
 }
@@ -224,44 +213,36 @@ func PostBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 // @Description Upload a chunk of data for the specified upload.
 // @Accept json
 // @Attention
-// @Param namespace path string true "namespace, only numbers,letters and underscore are allowed, maxlength is 255 byte. eg: Huawei"
+// @Param namespace path string true "namespace, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: Huawei"
 // @Param repository path string true "name of repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
-// @Param uuid path string true "a uuid identifying the upload, eg: XXX?_state=YYY"
+// @Param uuid path string true "a uuid identifying the upload"
 // @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
+// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
 // @Param requestbody body string true "blob binary data"
 // @Success 202 {string} string ""
+// @Failure 401 {string} string ""
+// @Failure 413 {string} string "request entity is too large, response error information"
 // @Failure 500 {string} string "internal server error, response error information of api server"
 // @Router /v2/{namespace}/{repository}/blobs/uploads/{uuid} [patch]
-// @ResponseHeaders Content-Type: text/plain; charset=utf-8
-// @ResponseHeaders Docker-Upload-Uuid: <uuid>
-// @ResponseHeaders Location: /v2/<name>/blobs/uploads/<uuid>
-// @ResponseHeaders Range: 0-0
+// @ResponseHeaders "Content-Type" "text/plain; charset=utf-8"
+// @ResponseHeaders "Docker-Upload-Uuid" "uuid"
+// @ResponseHeaders "Location" "/v2/{name}/blobs/uploads/{uuid}"
+// @ResponseHeaders "Range" "0-0"
 func PatchBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
-	var respcode int
-
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
-
-	defer func() {
-		fmt.Printf("\n #### mabin PatchBlobsV2Handler 000: respcode=%v \n", respcode)
-		if respcode != http.StatusAccepted {
-			module.ReleaseSessionID(namespace, repository, setting.DOCKERAPIV2)
-		}
-	}()
-
-	// TODO: where to get sessionid, and error code must be checked
-	sessionid := ctx.Req.Header.Get("Docker-Upload-Uuid")
-	if err := module.ValidateSessionID(namespace, repository, sessionid, setting.DOCKERAPIV2); err != nil {
-		message := fmt.Sprintf("%v", err)
+	if errcode, err := module.ValidateName(namespace, repository); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
 		log.Error(message)
 
-		respcode = http.StatusAccepted
-		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, sessionid)
-		return respcode, result
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
 	}
 
-	u := module.NewURLFromRequest(ctx.Req.Request)
+	req := ctx.Req.Request
+	client := module.RemoteAddr(req)
+	u := module.NewURLFromRequest(req)
+	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
 
 	name := namespace + "/" + repository
 	desc := ctx.Params(":uuid")
@@ -272,29 +253,46 @@ func PatchBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 	//saving specific tarsum every times is in order to split the same tarsum in HEAD handler
 	if !utils.IsDirExist(imagePathTmp) {
-		os.MkdirAll(imagePathTmp, os.ModePerm)
+		os.MkdirAll(imagePathTmp, 0750)
 	}
 
 	file, err := os.OpenFile(layerPathTmp, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0640)
 	if err != nil {
-		message := fmt.Sprintf("Create tmp File Error.")
-		log.Error("[REGISTRY API V2] Create tmp file error: %s %s", layerPathTmp, err.Error())
+		message := fmt.Sprintf("Create tmp File Error")
+		log.Errorf("[REGISTRY API V2] Create tmp file error: %s %s", layerPathTmp, err.Error())
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusInternalServerError, result
 	}
 	defer file.Close()
 	size, err := io.Copy(file, ctx.Req.Request.Body)
 	if err != nil {
 		message := fmt.Sprintf("Failed to save blob %s", layerPathTmp)
-		log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusInternalServerError, result
 	}
 
-	//state := utils.MD5(fmt.Sprintf("%s/%d", name, time.Now().UnixNano()/int64(time.Millisecond)))
-	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", u.Scheme, u.Host, name, uuid, sessionid)
+	if size > setting.MaxUploadFileSize {
+		message := fmt.Sprintf("File too large when uploading blob %s", layerPathTmp)
+		log.Errorf("[REGISTRY API V2] %s", message)
+
+		errMsg, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, nil)
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
+		return http.StatusRequestEntityTooLarge, errMsg
+	}
+
+	state := utils.MD5(fmt.Sprintf("%s/%d", name, time.Now().UnixNano()/int64(time.Millisecond)))
+	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", u.Scheme, u.Host, name, uuid, state)
 
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	ctx.Resp.Header().Set("Docker-Upload-Uuid", uuid)
@@ -302,6 +300,9 @@ func PatchBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	ctx.Resp.Header().Set("Range", fmt.Sprintf("0-%v", size-1))
 
 	result, _ := json.Marshal(map[string]string{})
+
+	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
+
 	return http.StatusAccepted, result
 }
 
@@ -309,38 +310,37 @@ func PatchBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 // @Description For an upload to be considered complete, the client must submit a PUT request on the upload endpoint with a digest parameter.
 // @Accept json
 // @Attention
-// @Param namespace path string true "namespace, only numbers,letters and underscore are allowed, maxlength is 255 byte. eg: Huawei"
+// @Param namespace path string true "namespace, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: Huawei"
 // @Param repository path string true "name of repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
-// @Param uuid path string true "a uuid identifying the upload, eg: XXX?_status=YYY"
+// @Param uuid path string true "a uuid identifying the upload"
 // @Param digest query string true "hash of image's layer, standard sha256 hash value, contain numbers,letters,colon and xdigit, length is not less than 32. eg: sha256:XXX"
 // @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
+// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
 // @Success 201 {string} string ""
+// @Failure 400 {string} string "bad request, parameters or url is error, response error information"
+// @Failure 401 {string} string ""
 // @Failure 409 {string} string "operation is conflicted, response error information"
+// @Failure 413 {string} string "request entity is too large, response error information"
 // @Failure 500 {string} string "internal server error, response error information of api server"
 // @Router /v2/{namespace}/{repository}/blobs/uploads/{uuid} [put]
-// @ResponseHeaders Content-Type: text/plain; charset=utf-8
-// @ResponseHeaders Docker-Content-Digest: <digest>
-// @ResponseHeaders Location: /v2/<name>/blobs/uploads/<digest>
+// @ResponseHeaders "Content-Type" "text/plain; charset=utf-8"
+// @ResponseHeaders "Docker-Content-Digest" "digest"
+// @ResponseHeaders "Location" "/v2/{name}/blobs/uploads/{digest}"
 func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
-	var respcode int
-
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
-
-	defer module.ReleaseSessionID(namespace, repository, setting.DOCKERAPIV2)
-
-	sessionid := ctx.Req.Header.Get("Docker-Upload-Uuid")
-	if err := module.ValidateSessionID(namespace, repository, sessionid, setting.DOCKERAPIV2); err != nil {
-		message := fmt.Sprintf("%v", err)
+	if errcode, err := module.ValidateName(namespace, repository); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
 		log.Error(message)
 
-		respcode = http.StatusBadRequest
-		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, sessionid)
-		return respcode, result
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
 	}
 
-	u := module.NewURLFromRequest(ctx.Req.Request)
+	req := ctx.Req.Request
+	client := module.RemoteAddr(req)
+	u := module.NewURLFromRequest(req)
+	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
 
 	name := namespace + "/" + repository
 	desc := ctx.Params(":uuid")
@@ -350,8 +350,12 @@ func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	if !validate.IsDigestValid(digest) {
 		detail := fmt.Sprintf("%s", digest)
 		result, _ := module.ReportError(module.DIGEST_INVALID, "Invalid digest format", detail)
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, "Invalid digest format")
+
 		return http.StatusBadRequest, result
 	}
+
 	tarsum := strings.Split(digest, ":")[1]
 
 	imagePathTmp := module.GetImagePath(uuid, setting.DOCKERAPIV2)
@@ -361,48 +365,69 @@ func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 	//saving specific tarsum every times is in order to split the same tarsum in HEAD handler
 	//lock image table in order to wait for writing
+	module.ManiLock.Lock()
 	i := new(models.DockerImageV2)
 	i.BlobSum = tarsum
 	if err := i.Save(); err != nil {
-		if strings.Contains(err.Error(), "source is busy") {
-			message := fmt.Sprintf("Failed to save blob description %s", tarsum)
-			log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
-
-			result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
-			return http.StatusConflict, result
-		}
+		module.ManiLock.Unlock()
 		message := fmt.Sprintf("Failed to save blob description %s", tarsum)
-		log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusInternalServerError, result
 	}
+	module.ManiLock.Unlock()
 
 	layerlen, err := module.SaveLayerLocal(imagePathTmp, layerPathTmp, imagePath, layerPath, ctx.Req.Request.Body)
+	if layerlen > setting.MaxUploadFileSize {
+		message := fmt.Sprintf("File too large when uploading blob %s", layerPathTmp)
+		log.Errorf("[REGISTRY API V2] %s", message)
+
+		errMsg, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, nil)
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
+		return http.StatusRequestEntityTooLarge, errMsg
+	}
+
 	if err != nil {
 		message := fmt.Sprintf("Failed to save layer %s", layerPath)
-		log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusInternalServerError, result
 	}
 
 	//saving specific tarsum every times is in order to split the same tarsum in HEAD handler
+	module.ManiLock.Lock()
+	defer module.ManiLock.Unlock()
 	i = new(models.DockerImageV2)
 	i.BlobSum = tarsum
 	if _, err := i.IsExist(); err != nil {
 		message := fmt.Sprintf("Failed to save blob description %s", tarsum)
-		log.Errorf("%s: %v", message, err.Error())
+		log.Errorf("%s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusInternalServerError, result
 	}
 	i.Path, i.Size = layerPath, layerlen
 	if err := i.Update(); err != nil {
 		message := fmt.Sprintf("Failed to save blob description %s", tarsum)
-		log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusInternalServerError, result
 	}
 
@@ -413,6 +438,9 @@ func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	ctx.Resp.Header().Set("Location", random)
 
 	result, _ := json.Marshal(map[string]string{})
+
+	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
+
 	return http.StatusCreated, result
 }
 
@@ -420,136 +448,206 @@ func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 // @Description Retrieve the blob from the registry identified by digest.
 // @Accept json
 // @Attention
-// @Param namespace path string true "namespace, only numbers,letters and underscore are allowed, maxlength is 255 byte. eg: Huawei"
+// @Param namespace path string true "namespace, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: Huawei"
 // @Param repository path string true "name of repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
 // @Param digest path string true "hash of image's layer, standard sha256 hash value, contain numbers,letters,colon and xdigit, length is not less than 32. eg: sha256:XXX"
 // @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
+// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
 // @Success 200 {string} string ""
+// @Failure 401 {string} string ""
 // @Failure 404 {string} string "not found blob, response error information"
 // @Failure 409 {string} string "operation is conflicted, response error information"
 // @Failure 500 {string} string "internal server error, response error information"
 // @Router /v2/{namespace}/{repository}/blobs/{digest} [get]
-// @ResponseHeaders Content-Type: application/octet-stream
-// @ResponseHeaders Docker-Content-Digest: <digest>
-// @ResponseHeaders Content-Length: <length>
-func GetBlobsV2Handler(ctx *macaron.Context) int {
+// @ResponseHeaders "Content-Type" "application/octet-stream"
+// @ResponseHeaders "Docker-Content-Digest" "digest"
+// @ResponseHeaders "Content-Length" "length"
+func GetBlobsV2Handler(ctx *macaron.Context) {
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+	if errcode, err := module.ValidateName(namespace, repository); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
+		result, _ := module.ReportError(errcode, message, nil)
+
+		ctx.Resp.WriteHeader(http.StatusBadRequest)
+		ctx.Resp.Write(result)
+		return
+	}
+
 	digest := ctx.Params(":digest")
+	if errcode, err := module.ValidateDigest(digest); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
+		result, _ := module.ReportError(errcode, message, nil)
+
+		ctx.Resp.WriteHeader(http.StatusBadRequest)
+		ctx.Resp.Write(result)
+		return
+	}
+
+	req := ctx.Req.Request
+	client := module.RemoteAddr(req)
+	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
+
 	tarsum := strings.Split(digest, ":")[1]
 
 	i := new(models.DockerImageV2)
 	i.BlobSum = tarsum
-	if available, err := i.Read(); err != nil {
-		if strings.Contains(err.Error(), "source is busy") {
-			message := fmt.Sprintf("Failed to get blob %s", tarsum)
-			log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
-
-			result, _ := module.ReportError(module.DENIED, message, err.Error())
-			ctx.Resp.Write(result)
-			return http.StatusConflict
-		}
+	module.ManiLock.Lock()
+	if available, err := i.IsExist(); err != nil {
+		module.ManiLock.Unlock()
 		message := fmt.Sprintf("Failed to get blob %s", tarsum)
-		log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
+		ctx.Resp.WriteHeader(http.StatusInternalServerError)
 		ctx.Resp.Write(result)
-		return http.StatusInternalServerError
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
+		return
 	} else if !available {
+		module.ManiLock.Unlock()
 		message := fmt.Sprintf("Not found blob: %s", tarsum)
 		log.Errorf("[REGISTRY API V2] %s", message)
 
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, digest)
+		ctx.Resp.WriteHeader(http.StatusNotFound)
 		ctx.Resp.Write(result)
-		return http.StatusNotFound
-	}
 
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
+		return
+	}
+	module.ManiLock.Unlock()
+
+	module.FileLock.Lock()
+	defer module.FileLock.Unlock()
 	fd, err := os.Open(i.Path)
 	if err != nil {
 		message := fmt.Sprintf("Failed to get layer %s", i.Path)
-		log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, digest)
+		ctx.Resp.WriteHeader(http.StatusInternalServerError)
 		ctx.Resp.Write(result)
-		return http.StatusInternalServerError
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
+		return
 	}
 	defer fd.Close()
-	http.ServeContent(ctx.Resp, ctx.Req.Request, tarsum, time.Now(), fd)
 
 	ctx.Resp.Header().Set("Content-Type", "application/octet-stream")
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
 	ctx.Resp.Header().Set("Content-Length", fmt.Sprint("%v", i.Size))
+	http.ServeContent(ctx.Resp, ctx.Req.Request, tarsum, time.Now(), fd)
 
-	return http.StatusOK
+	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
+
+	return
 }
 
 // @Title Upload the image manifests
 // @Description Once all of the layers for an image are uploaded, the client can upload the image manifest.
 // @Accept json
 // @Attention
-// @Param namespace path string true "namespace, only numbers,letters and underscore are allowed, maxlength is 255 byte. eg: Huawei"
+// @Param namespace path string true "namespace, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: Huawei"
 // @Param repository path string true "name of repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
 // @Param tag path string true "tag of the target manifest, only numbers,letters,bar,dot and underscore are allowed, maxlength is 128 byte. eg: latest"
 // @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
+// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
 // @Param Content-Type header string true "media type of manifest"
 // @Param requestbody body string true "manifest binary data"
 // @Success 201 {string} string ""
 // @Success 202 {string} string ""
 // @Failure 400 {string} string "bad request, response error information"
+// @Failure 401 {string} string ""
 // @Failure 500 {string} string "internal server error, response error information of api server"
 // @Router /v2/{namespace}/{repository}/manifests/{tag} [put]
-// @ResponseHeaders Content-Type: application/octet-stream
-// @ResponseHeaders Docker-Content-Digest: <digest>
-// @ResponseHeaders Location: /v2/<name>/manifests/<digest>
+// @ResponseHeaders "Content-Type" "application/octet-stream"
+// @ResponseHeaders "Docker-Content-Digest" "digest"
+// @ResponseHeaders "Location" "/v2/{name}/manifests/{digest}"
 func PutManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
+	manifest, _ := ctx.Req.Body().Bytes()
+	tarsumlist, err := module.GetTarsumlist(manifest)
+	if err != nil {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
+		result, _ := module.ReportError(module.MANIFEST_INVALID, message, nil)
+		return http.StatusBadRequest, result
+	}
+
+	if len(tarsumlist) <= 0 {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
+
+		result, _ := module.ReportError(module.MANIFEST_INVALID, message, nil)
+		return http.StatusBadRequest, result
+	}
+
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
-	u := module.NewURLFromRequest(ctx.Req.Request)
+	if errcode, err := module.ValidateName(namespace, repository); err != nil {
+		module.Recycleimage(tarsumlist)
+
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
+	}
+
+	tag := ctx.Params(":tag")
+	if errcode, err := module.ValidateTag(tag); err != nil {
+		module.Recycleimage(tarsumlist)
+
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
+	}
+
+	req := ctx.Req.Request
+	client := module.RemoteAddr(req)
+	u := module.NewURLFromRequest(req)
+	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
 
 	name := namespace + "/" + repository
 	agent := ctx.Req.Header.Get("User-Agent")
-	tag := ctx.Params(":tag")
 
-	manifest, _ := ctx.Req.Body().Bytes()
 	digest, err := signature.DigestManifest(manifest)
 	if err != nil {
+		module.Recycleimage(tarsumlist)
+
 		message := fmt.Sprintf("Failed to get manifest digest")
-		log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
-
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusBadRequest, result
 	}
 
-	r := new(models.DockerV2)
-	r.Namespace, r.Repository = namespace, repository
-	condition := new(models.DockerV2)
-	*condition = *r
-	r.SchemaVersion, r.Agent = "DOCKERAPIV2", agent
-	if err := r.Save(condition); err != nil {
-		message := fmt.Sprintf("Failed to save repository %s/%s", namespace, repository)
-		log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
-
-		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
-		return http.StatusInternalServerError, result
-	}
-
-	err, schema := module.ParseManifest(r.Id, tag, manifest)
+	module.ManiLock.Lock()
+	defer module.ManiLock.Unlock()
+	err, schema := module.ParseManifest(namespace, repository, tag, agent, manifest)
 	if err != nil {
+		if strings.Contains(err.Error(), "Manifest content error") {
+			message := fmt.Sprintf("Failed to save manifest")
+			log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
+
+			result, _ := module.ReportError(module.MANIFEST_INVALID, message, err.Error())
+			audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+			return http.StatusBadRequest, result
+		}
 		message := fmt.Sprintf("Failed to save manifest")
-		log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
-		result, _ := module.ReportError(module.MANIFEST_INVALID, message, err.Error())
-		return http.StatusBadRequest, result
-	}
+		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
 
-	var upService us.UpdateService
-	fullname := tag
-	sha := digest
-	if err := upService.Put("dockerv2", namespace, repository, fullname, []string{sha}); err != nil {
-		message := fmt.Sprintf("Failed to create a signature for %s/%s/%s", namespace, repository, fullname)
-		log.Errorf("%s", message)
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
-		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, nil)
 		return http.StatusInternalServerError, result
 	}
 
@@ -566,6 +664,9 @@ func PutManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 	var status = []int{http.StatusBadRequest, http.StatusAccepted, http.StatusCreated}
 
 	result, _ := json.Marshal(map[string]string{})
+
+	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
+
 	return status[schema], result
 }
 
@@ -573,34 +674,54 @@ func PutManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 // @Description Fetch the tags under the repository identified by name.
 // @Accept json
 // @Attention
-// @Param namespace path string true "namespace, only numbers,letters and underscore are allowed, maxlength is 255 byte. eg: Huawei"
+// @Param namespace path string true "namespace, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: Huawei"
 // @Param repository path string true "name of repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
 // @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
+// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
 // @Param Content-Type header string true "application/json"
 // @Success 200 {object} models.Taglist "all the tags in namespace/repository"
 // @Failure 400 {string} string "bad request, response error information"
+// @Failure 401 {string} string ""
 // @Failure 404 {string} string "not found repository, response error information"
 // @Failure 500 {string} string "internal server error, response error information of api server"
 // @Router /v2/{namespace}/{repository}/tags/list [get]
 func GetTagsListV2Handler(ctx *macaron.Context) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
+	if errcode, err := module.ValidateName(namespace, repository); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
+
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
+	}
+
+	req := ctx.Req.Request
+	client := module.RemoteAddr(req)
+	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
 
 	r := new(models.DockerV2)
 	r.Namespace, r.Repository = namespace, repository
+	module.ManiLock.Lock()
+	defer module.ManiLock.Unlock()
 	if exists, err := r.IsExist(); err != nil {
 		message := fmt.Sprintf("Failed to get repository %s/%s", namespace, repository)
-		log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.TAG_INVALID, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository %s/%s", namespace, repository)
 		log.Errorf("[REGISTRY API V2] %s", message)
 
 		result, _ := module.ReportError(module.TAG_INVALID, message, nil)
-		return http.StatusBadRequest, result
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
+		return http.StatusNotFound, result
 	}
 
 	tl := new(models.Taglist)
@@ -611,22 +732,31 @@ func GetTagsListV2Handler(ctx *macaron.Context) (int, []byte) {
 	t.DockerV2 = r.Id
 	if err := t.List(&results); err != nil {
 		message := fmt.Sprintf("Failed to get tagslist")
-		log.Errorf("%s: %v", message, err.Error())
+		log.Errorf("%s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
-		return http.StatusBadRequest, result
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
+		return http.StatusInternalServerError, result
 	}
 	for _, v := range results {
 		tl.Tags = append(tl.Tags, v.Tag)
 	}
 	if len(tl.Tags) <= 0 {
-		log.Errorf("[REGISTRY API V2] Repository %v/%v tags not found", namespace, repository)
+		log.Errorf("[REGISTRY API V2] Repository %s/%s tags not found", namespace, repository)
 
 		result, _ := json.Marshal(map[string]string{"message": "Repository tags not found"})
+		message := "Repository tags not found"
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusNotFound, result
 	}
 
 	result, _ := json.Marshal(tl)
+
+	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
+
 	return http.StatusOK, result
 }
 
@@ -634,37 +764,65 @@ func GetTagsListV2Handler(ctx *macaron.Context) (int, []byte) {
 // @Description Fetch the tags under the repository identified by name.
 // @Accept json
 // @Attention
-// @Param namespace path string true "namespace, only numbers,letters and underscore are allowed, maxlength is 255 byte. eg: Huawei"
+// @Param namespace path string true "namespace, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: Huawei"
 // @Param repository path string true "name of repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
 // @Param tag path string true "tag of the target manifest, only numbers,letters,bar,dot and underscore are allowed, maxlength is 128 byte. eg: latest"
 // @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
+// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
 // @Success 200 {string} string "manifest binary data"
 // @Failure 400 {string} string "bad request, response error information"
+// @Failure 401 {string} string ""
 // @Failure 404 {string} string "not found repository, response error information"
 // @Failure 500 {string} string "internal server error, response error information of api server"
 // @Router /v2/{namespace}/{repository}/manifests/{tag} [get]
-// @ResponseHeaders Content-Type: <media type of manifest>
-// @ResponseHeaders Docker-Content-Digest: <digest>
-// @ResponseHeaders Content-Length: <length>
+// @ResponseHeaders "Content-Type" "media type of manifest"
+// @ResponseHeaders "Docker-Content-Digest" "digest"
+// @ResponseHeaders "Content-Length" "length"
 func GetManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
+	if errcode, err := module.ValidateName(namespace, repository); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
+
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
+	}
+
 	tag := ctx.Params(":tag")
+	if errcode, err := module.ValidateTag(tag); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
+
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
+	}
+
+	req := ctx.Req.Request
+	client := module.RemoteAddr(req)
+	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
 
 	r := new(models.DockerV2)
 	r.Namespace, r.Repository = namespace, repository
+	module.ManiLock.Lock()
+	defer module.ManiLock.Unlock()
 	if exists, err := r.IsExist(); err != nil {
 		message := fmt.Sprintf("Failed to get repository %s/%s", namespace, repository)
-		log.Errorf("[REGISTRY API V2]%s: %v", message, err.Error())
+		log.Errorf("[REGISTRY API V2]%s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository %s/%s", namespace, repository)
 		log.Errorf("[REGISTRY API V2]%s", message)
 
 		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, message, nil)
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusBadRequest, result
 	}
 
@@ -672,24 +830,33 @@ func GetManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 	t.DockerV2, t.Tag = r.Id, tag
 	if exists, err := t.IsExist(); err != nil {
 		message := fmt.Sprintf("Failed to get manifest")
-		log.Errorf("%s: %v", message, err.Error())
+		log.Errorf("%s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found manifest %s/%s:%s", namespace, repository, tag)
 		log.Errorf("[REGISTRY API V2] %s", message)
 
 		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, message, nil)
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusNotFound, result
 	}
 
 	digest, err := signature.DigestManifest([]byte(t.Manifest))
 	if err != nil {
 		message := fmt.Sprintf("Failed to signature manifest")
-		log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusInternalServerError, result
 	}
 
@@ -698,6 +865,8 @@ func GetManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
 	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(len(t.Manifest)))
 
+	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
+
 	return http.StatusOK, []byte(t.Manifest)
 }
 
@@ -705,66 +874,74 @@ func GetManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 // @Description Delete the blob identified by name and digest.
 // @Accept json
 // @Attention
-// @Param namespace path string true "namespace, only numbers,letters and underscore are allowed, maxlength is 255 byte. eg: Huawei"
+// @Param namespace path string true "namespace, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: Huawei"
 // @Param repository path string true "name of repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
 // @Param digest path string true "hash of image's layer, standard sha256 hash value, contain numbers,letters,colon and xdigit, length is not less than 32. eg: sha256:XXX"
 // @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
+// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
 // @Success 200 {string} string ""
+// @Failure 401 {string} string ""
 // @Failure 404 {string} string "not found blob, response error information"
 // @Failure 409 {string} string "operation is conflicted, response error information"
 // @Failure 500 {string} string "internal server error, response error information of api server"
 // @Router /v2/{namespace}/{repository}/blobs/{digest} [delete]
-// @ResponseHeaders Content-Length: <length>
-// @ResponseHeaders Docker-Content-Digest: <digest>
+// @ResponseHeaders "Content-Length" "length"
+// @ResponseHeaders "Docker-Content-Digest" "digest"
 func DeleteBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
-	digest := ctx.Params(":digest")
-	tarsum := strings.Split(digest, ":")[1]
-	i := new(models.DockerImageV2)
-	i.BlobSum = tarsum
-	if available, err := i.Write(); err != nil {
-		if strings.Contains(err.Error(), "source is busy") {
-			message := fmt.Sprintf("Failed to delete blob %s", tarsum)
-			log.Errorf("[REGISTRY API V2] %s: %v", message, err.Error())
+	namespace := ctx.Params(":namespace")
+	repository := ctx.Params(":repository")
+	if errcode, err := module.ValidateName(namespace, repository); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
 
-			result, _ := module.ReportError(module.DENIED, message, err.Error())
-			return http.StatusConflict, result
-		}
-		message := fmt.Sprintf("Failed to delete blob %s", tarsum)
-		log.Error("[REGISTRY API V2] %s", message, err.Error())
-
-		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
-		return http.StatusInternalServerError, result
-	} else if !available {
-		message := fmt.Sprintf("Not found blob %v", digest)
-		log.Error("[REGISTRY API V2] %s", message)
-
-		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, digest)
-		return http.StatusNotFound, result
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
 	}
 
-	if i.Reference == 0 {
-		if err := i.Delete(); err != nil {
-			message := fmt.Sprintf("Failed to delete blob %s", tarsum)
-			log.Error("[REGISTRY API V2] %s: %v", message, err.Error())
+	digest := ctx.Params(":digest")
+	if errcode, err := module.ValidateDigest(digest); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
 
-			result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
-			return http.StatusInternalServerError, result
-		}
-		imagePath := module.GetImagePath(tarsum, setting.DOCKERAPIV2)
-		if err := os.RemoveAll(imagePath); err != nil {
-			message := fmt.Sprintf("Failed to delete blob %s", tarsum)
-			log.Error("[REGISTRY API V2] %s: %v", message, err.Error())
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
+	}
 
-			result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
+	req := ctx.Req.Request
+	client := module.RemoteAddr(req)
+	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
+
+	tarsum := strings.Split(digest, ":")[1]
+
+	module.ManiLock.Lock()
+	defer module.ManiLock.Unlock()
+	if err := module.Deleteblobv2(tarsum); err != nil {
+		if strings.Compare(err.Error(), "Not found docker blob") == 0 {
+			message := fmt.Sprintf("%s: %s", err.Error(), digest)
+			log.Errorf("[REGISTRY API V2] %s", message)
+			result, _ := module.ReportError(module.BLOB_UNKNOWN, message, digest)
+
+			audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 			return http.StatusNotFound, result
 		}
+
+		message := fmt.Sprintf("Failed to delete blob %s", tarsum)
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
+		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
+		return http.StatusInternalServerError, result
 	}
 
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
 	ctx.Resp.Header().Set("Content-Length", "0")
 
 	result, _ := json.Marshal(map[string]string{})
+
+	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
+
 	return http.StatusOK, result
 }
 
@@ -772,30 +949,55 @@ func DeleteBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 // @Description Delete the manifest identified by name and digest.
 // @Accept json
 // @Attention
-// @Param namespace path string true "namespace, only numbers,letters and underscore are allowed, maxlength is 255 byte. eg: Huawei"
+// @Param namespace path string true "namespace, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: Huawei"
 // @Param repository path string true "name of repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
 // @Param reference path string true "hash of image's layer, standard sha256 hash value, contain numbers,letters,colon and xdigit, length is not less than 32. eg: sha256:XXX"
 // @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
+// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
 // @Success 202 {string} string ""
+// @Failure 401 {string} string ""
 // @Failure 404 {string} string "not found repository, response error information"
 // @Failure 500 {string} string "internal server error, response error information of api server"
 // @Router /v2/{namespace}/{repository}/manifests/{reference} [delete]
 func DeleteManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
-	//TODO: to consider parallel situation
-	repository := ctx.Params(":repository")
 	namespace := ctx.Params(":namespace")
-	name := namespace + "/" + repository
-	reference := ctx.Params(":reference")
+	repository := ctx.Params(":repository")
+	if errcode, err := module.ValidateName(namespace, repository); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
 
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
+	}
+
+	reference := ctx.Params(":reference")
+	if errcode, err := module.ValidateDigest(reference); err != nil {
+		message := fmt.Sprintf("%s", err.Error())
+		log.Error(message)
+
+		result, _ := module.ReportError(errcode, message, nil)
+		return http.StatusBadRequest, result
+	}
+
+	req := ctx.Req.Request
+	client := module.RemoteAddr(req)
+	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
+
+	name := namespace + "/" + repository
+
+	module.ManiLock.Lock()
+	defer module.ManiLock.Unlock()
 	r := new(models.DockerV2)
 	r.Namespace, r.Repository = namespace, repository
 	if exists, err := r.IsExist(); err != nil {
-		message := fmt.Sprintf("Failed to get repository %v/%v", namespace, repository)
-		log.Error("[REGISTRY API V2] %s: %v", message, err.Error())
+		message := fmt.Sprintf("Failed to get repository %s/%s", namespace, repository)
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		detail := map[string]string{"Name": name}
 		result, _ := module.ReportError(module.NAME_INVALID, message, detail)
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository %s/%s", namespace, repository)
@@ -803,6 +1005,9 @@ func DeleteManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		detail := map[string]string{"Name": name}
 		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, message, detail)
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusNotFound, result
 	}
 
@@ -810,10 +1015,13 @@ func DeleteManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 	t.DockerV2 = r.Id
 	results := []models.DockerTagV2{}
 	if err := t.List(&results); err != nil {
-		message := fmt.Sprintf("Failed to get tag list %v/%v", namespace, repository)
-		log.Error("[REGISTRY API V2] %s: %v", message, err.Error())
+		message := fmt.Sprintf("Failed to get tag list %s/%s", namespace, repository)
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.NAME_INVALID, message, nil)
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusInternalServerError, result
 	}
 	//if digest of tag accord with the reference, then delete the tag info
@@ -822,89 +1030,91 @@ func DeleteManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 		tagslist = append(tagslist, v.Tag)
 	}
 	if len(tagslist) <= 0 {
-		log.Errorf("[REGISTRY API V2] Repository %v/%v tags not found", namespace, repository)
+		log.Errorf("[REGISTRY API V2] Repository %s/%s tags not found", namespace, repository)
 
 		result, _ := json.Marshal(map[string]string{"message": "Repository tags not found"})
+		message := "Repository tags not found"
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusNotFound, result
 	}
 	if err := module.DeleteTagByRefer(r.Id, reference, tagslist); err != nil {
 		message := fmt.Sprintf("Failed to delete image")
-		log.Error("[REGISTRY API V2] %s: %v", message, err.Error())
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, message, err.Error())
+
+		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusNotFound, result
 	}
 
 	result, _ := json.Marshal(map[string]string{})
+
+	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
+
 	return http.StatusAccepted, result
 }
 
-// @Title Download repository metadata
-// @Description You can download the metadata from docker v2 repository.
-// @Param namespace path string true "namespace, only numbers,letters and underscore are allowed, maxlength is 255 byte. eg: Huawei"
-// @Param repository path string true "name of repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
+// @Title Get repository name list
+// @Description Retrieve a sorted, json list of repositories available in the dockyard.
+// @Accept json
+// @Attention
 // @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
-// @Success 200 {string} string "metadata binary data"
+// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
+// @Success 200 {object} models.Repolist "docker repository json information, eg:{"repositories": [\<name\>,...]}"
 // @Failure 500 {string} string "internal server error, response error information of api server"
-// @Router /v2/{namespace}/{repository}/meta [get]
-// @ResponseHeaders Content-Type: application/json
-// @ResponseHeaders Content-Length: <length>
-func GetMetaV2Handler(ctx *macaron.Context) (int, []byte) {
-	repository := ctx.Params(":repository")
-	namespace := ctx.Params(":namespace")
+// @Router /v2/_catalog [get]
+func GetCatalogV2Handler(ctx *macaron.Context) (int, []byte) {
+	r := new(models.DockerV2)
+	results := []models.DockerV2{}
 
-	var upService us.UpdateService
-	content, err := upService.ReadMeta("dockerv2", namespace, repository)
+	if err := r.List(&results); err != nil {
+		message := fmt.Sprintf("Failed to list repositories")
+		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
+
+		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
+		return http.StatusInternalServerError, result
+	}
+
+	// Get User Info
+	userInfo := new(accessmanager.TokenFormat)
+	if strings.EqualFold(strings.ToLower(setting.AuthEnable), "true") {
+		user, err := GetUserInfo(ctx)
+		if err != nil {
+			log.Errorf("Get User Info Error:%s", err.Error())
+			return http.StatusUnauthorized, []byte("Authenticate Error")
+		}
+		userInfo = user
+	}
+
+	rl := new(models.Repolist)
+	var name string
+	for _, v := range results {
+		// Auth Handler
+		if strings.EqualFold(strings.ToLower(setting.AuthEnable), "true") {
+			if v.Namespace != userInfo.Token.User.Domain.Name && !v.IsPublic {
+				continue
+			}
+		}
+
+		if v.Namespace == "" {
+			name = v.Repository
+		} else {
+			name = v.Namespace + "/" + v.Repository
+		}
+
+		rl.Repositories = append(rl.Repositories, name)
+	}
+
+	result, err := json.Marshal(rl)
 	if err != nil {
-		message := fmt.Sprintf("Failed to read meta data of %s/%s", namespace, repository)
-		log.Errorf("%s: %v", message, err.Error())
+		message := fmt.Sprintf("Failed to marshal appname")
+		log.Errorf("%s: %s", message, err.Error())
 
-		result, _ := module.ReportError(module.UNKNOWN, message, nil)
+		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
 		return http.StatusInternalServerError, result
 	}
 
-	ctx.Resp.Header().Set("Content-Type", "application/json")
-	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(len(content)))
-
-	return http.StatusOK, content
-}
-
-// @Title Download repository metadata signature
-// @Description You can download the repository metadata signature from software repository.
-// @Param namespace path string true "namespace, only numbers,letters and underscore are allowed, maxlength is 255 byte. eg: Huawei"
-// @Param repository path string true "name of repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
-// @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, fllow the format as <scheme> <token>, eg: Authorization: Bearer token..."
-// @Success 200 {string} string "blob binary data"
-// @Failure 500 {string} string "internal server error, response error information of api server"
-// @Router /v2/{namespace}/{repository}/metasign [get]
-// @ResponseHeaders Content-Type: application/octet-stream
-// @ResponseHeaders Content-Length: <length>
-func GetMetaSignV2Handler(ctx *macaron.Context) (int, []byte) {
-	repository := ctx.Params(":repository")
-	namespace := ctx.Params(":namespace")
-
-	if err := us.KeyManagerEnabled(); err != nil {
-		message := "KeyManager is not enabled or does not set proper"
-		log.Errorf("%s: %v", message, err)
-
-		result, _ := module.ReportError(module.UNKNOWN, message, nil)
-		return http.StatusInternalServerError, result
-	}
-
-	var upService us.UpdateService
-	content, err := upService.ReadMetaSign("dockerv2", namespace, repository)
-	if err != nil {
-		message := fmt.Sprintf("Failed to read meta data of %s/%s", namespace, repository)
-		log.Errorf("%s: %v", message, err.Error())
-
-		result, _ := module.ReportError(module.UNKNOWN, message, nil)
-		return http.StatusInternalServerError, result
-	}
-
-	ctx.Resp.Header().Set("Content-Type", "application/octet-stream")
-	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(len(content)))
-
-	return http.StatusOK, content
+	return http.StatusOK, result
 }

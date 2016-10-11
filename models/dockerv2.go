@@ -29,14 +29,32 @@ type DockerV2 struct {
 	Namespace     string     `json:"namespace" sql:"not null;type:varchar(255)"`
 	Repository    string     `json:"repository" sql:"not null;type:varchar(255)"`
 	SchemaVersion string     `json:"schemaversion" sql:"not null;type:varchar(255)"`
-	Manifests     string     `json:"manifests" sql:"null;type:text"`
+	Manifests     string     `json:"manifests" sql:"null;type:mediumtext"`
 	Agent         string     `json:"agent" sql:"null;type:text"`
 	Description   string     `json:"description" sql:"null;type:text"`
 	Size          int64      `json:"size" sql:"default:0"`
+	Path          string     `json:"path" sql:"-"`
 	Locked        int64      `json:"locked" sql:"default:0"`
+	IsPublic      bool       `json:"is_public" sql:"default:false"`
+	NumImages     int64      `json:"num_images" sql:"-"`
+	Tags          []string   `json:"tags,omitempty" sql:"-"`
 	CreatedAt     time.Time  `json:"created" sql:""`
 	UpdatedAt     time.Time  `json:"updated" sql:""`
 	DeletedAt     *time.Time `json:"deleted" sql:"index"`
+}
+
+type DockerV2Resp struct {
+	Namespace     string    `json:"namespace" description:"The namespace that the docker image belongs to"`
+	Repository    string    `json:"repository" description:"The docker image's name"`
+	SchemaVersion string    `json:"schemaversion" description:"The schema version of the image"`
+	Manifests     string    `json:"manifests" description:"The content of the image's manifests file"`
+	Size          int64     `json:"size" description:"The size of the image, which is the sum of all tags' size"`
+	Path          string    `json:"path" description:"The path for docker pull command"`
+	IsPublic      bool      `json:"is_public" description:"Is the docker image public or not"`
+	NumImages     int64     `json:"num_images" description:"The number of the image's tags"`
+	Tags          []string  `json:"tags,omitempty" description:"The array of the image's tags"`
+	CreatedAt     time.Time `json:"created" description:"Time when the image was created"`
+	UpdatedAt     time.Time `json:"updated" description:"The last time when the image was updated"`
 }
 
 type DockerTagV2 struct {
@@ -47,9 +65,22 @@ type DockerTagV2 struct {
 	Manifest  string     `json:"manifest" sql:"null;type:text"`
 	Schema    int64      `json:"schema" sql:""`
 	Locked    int64      `json:"locked" sql:"default:0"`
+	Path      string     `json:"path" sql:"-"`
+	Size      int64      `json:"size" sql:"-"`
 	CreatedAt time.Time  `json:"created" sql:""`
 	UpdatedAt time.Time  `json:"updated" sql:""`
 	DeletedAt *time.Time `json:"deleted" sql:"index"`
+}
+
+type DockerTagV2Resp struct {
+	Tag       string    `json:"tag" description:"Tag of the image"`
+	ImageId   string    `json:"imageid" description:"Id of the image"`
+	Manifest  string    `json:"manifest" description:"The image's manifest file content"`
+	Schema    int64     `json:"schema" description:"Schema of the image"`
+	Path      string    `json:"path" description:"The path for docker pull command"`
+	Size      int64     `json:"size" description:"The sum of the layer's and manifest file's size"`
+	CreatedAt time.Time `json:"created" description:"The time when the image(with tag) was created"`
+	UpdatedAt time.Time `json:"updated" description:"The last time when the image(with tag) was updated"`
 }
 
 type DockerImageV2 struct {
@@ -69,6 +100,22 @@ type DockerImageV2 struct {
 
 func (*DockerV2) TableName() string {
 	return "docker_V2"
+}
+
+func (r *DockerV2) Resp() *DockerV2Resp {
+	return &DockerV2Resp{
+		Namespace:     r.Namespace,
+		Repository:    r.Repository,
+		SchemaVersion: r.SchemaVersion,
+		Manifests:     r.Manifests,
+		Size:          r.Size,
+		Path:          r.Path,
+		IsPublic:      r.IsPublic,
+		NumImages:     r.NumImages,
+		Tags:          r.Tags,
+		CreatedAt:     r.CreatedAt,
+		UpdatedAt:     r.UpdatedAt,
+	}
 }
 
 func (r *DockerV2) AddUniqueIndex() error {
@@ -102,6 +149,14 @@ func (r *DockerV2) Save(condition *DockerV2) error {
 	}
 
 	return err
+}
+
+func (r *DockerV2) Update() error {
+	if err := db.Instance.Save(r); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *DockerV2) Delete() error {
@@ -154,12 +209,7 @@ func (i *DockerImageV2) Read() (bool, error) {
 	if records, err := db.Instance.Count(i); err != nil {
 		return false, err
 	} else if records > int64(0) {
-		if i.Locked == 0 {
-			i.Locked = 1
-			db.Instance.Update(i)
-			return true, err
-		}
-		return true, fmt.Errorf("source is busy")
+		return true, nil
 	}
 	return false, nil
 }
@@ -168,10 +218,7 @@ func (i *DockerImageV2) Write() (bool, error) {
 	if records, err := db.Instance.Count(i); err != nil {
 		return false, err
 	} else if records > int64(0) {
-		if i.Locked == 0 {
-			return true, err
-		}
-		return true, fmt.Errorf("source is busy")
+		return true, nil
 	}
 	return false, nil
 }
@@ -182,10 +229,6 @@ func (i *DockerImageV2) Save() error {
 		return err
 	}
 
-	if i.Locked != 0 {
-		return fmt.Errorf("source is busy")
-	}
-	i.Locked = -1
 	if !exists {
 		err = db.Instance.Create(i)
 	} else {
@@ -243,6 +286,19 @@ func (*DockerTagV2) TableName() string {
 	return "docker_tag_V2"
 }
 
+func (t *DockerTagV2) Resp() *DockerTagV2Resp {
+	return &DockerTagV2Resp{
+		Tag:       t.Tag,
+		ImageId:   t.ImageId,
+		Manifest:  t.Manifest,
+		Schema:    t.Schema,
+		Path:      t.Path,
+		Size:      t.Size,
+		CreatedAt: t.CreatedAt,
+		UpdatedAt: t.UpdatedAt,
+	}
+}
+
 func (t *DockerTagV2) AddUniqueIndex() error {
 	if err := db.Instance.AddUniqueIndex(t, "idx_dockertagv2_dockerv2_tag",
 		"docker_v2", "tag"); err != nil {
@@ -289,6 +345,13 @@ func (t *DockerTagV2) Delete() error {
 	}
 
 	return err
+}
+
+func (t *DockerTagV2) Count(countField string, condition string) (int64, error) {
+	sql := fmt.Sprintf("SELECT COUNT(%s) FROM %s %s", countField, t.TableName(), condition)
+	var count int64
+	db.Instance.Exec(sql).Row().Scan(&count)
+	return count, nil
 }
 
 func (t *DockerTagV2) List(results *[]DockerTagV2) error {

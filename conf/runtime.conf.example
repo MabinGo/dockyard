@@ -1,0 +1,53 @@
+
+listenmode=http
+httpscertfile=cert/containerops/containerops.crt
+httpskeyfile=cert/containerops/containerops.key
+# dev mode will bring you more detailed log
+runmode=dev
+# The path to store files and meta info
+path=data
+inspectinterval=180
+recycleinterval=300
+
+[log]
+filepath=log/containerops-log
+level=debug
+
+[database]
+driver=mysql
+name = dockyard
+uri=localhost:3306
+user = test
+passwd = 0000000100000001000000000000000500000001000000018F3054892FFDF7F5F76D309AEE8213337A886C0C05CF8E0729E2BC9BF63E0103000000100000000000000000069DE90596C9B342FC7EAD31F3A88C630000000100000000000008040000000100000001CDB0E53EF69DA0C7329974EC9C7C6F7200000000000000000CABB8559C39B1E06AAF0B0EA30BD7DC99787129CDF0107A020CEA885CAD3E4D
+
+[keymanager]
+#if uri is empty, it means key manager is disabled.
+kmuri = keymanager_data
+kmmode = share
+
+[web]
+external-enabled = true
+external-scheme = http
+external-host = 10.67.146.152
+external-port = 82
+allowed-origins = *
+allowed-methods = GET, POST, PUT, DELETE, OPTIONS
+allowed-headers = Content-Type
+# Max upload filesize in bytes, 2Gib by default
+max-upload-filesize = 2147483648
+
+
+[auth]
+#if enable is not equal to true, it means auth module is disabled.
+enable = true
+authn = iam
+authn_address = https://10.119.31.126
+authn_port = 31943
+
+[iam]
+#cert path , download from iam automatically
+certpath = cert/token/cert
+#ca path , download from iam automatically
+capath = cert/token/ca
+serviceakey = 5MFVISLPJE6POKPSSNUS
+serviceskey = 000000010000000100000000000000050000000100000001D47809AAD736086AFB46896C44DF84B5656940DF9CD2485AD9CCDEFC578032B9000000300000000000000000DC33E371B130DF1466490248203D3138269CB6796EC6347107DFE65D50CF90448382F54DFABCF585845A68B81518428700000001000000000000080400000001000000015A9A7B29EBFE545DED41ADE8F84552B90000000000000000EABF7539A2737FA8EC54E790BF5CBC1DDD3F110DA4E1A04E179538B24500F580

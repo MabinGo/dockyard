@@ -37,35 +37,29 @@ func (db *DB) AddForeignKey(model interface{}, foreignKeyField string, destinati
 
 //Get get the nums of records
 func (db *DB) Count(value interface{}) (int64, error) {
-	var count int64
-	if err := db.db.Where(value).Find(value).Count(&count).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	gdb := db.db.Where(value).Find(value)
+	if gdb.Error != nil {
+		if gdb.Error == gorm.ErrRecordNotFound {
 			return 0, nil
 		}
-		return 0, err
+		return 0, gdb.Error
 	}
-	return count, nil
+	return gdb.RowsAffected, nil
 }
 
 //Create create new data
 func (db *DB) Create(value interface{}) error {
-	tx := db.db.Begin()
-	if err := tx.Create(value).Error; err != nil {
-		tx.Rollback()
+	if err := db.db.Create(value).Error; err != nil {
 		return err
 	}
-	tx.Commit()
 	return nil
 }
 
 //Update update value of fields in database, if the value doesn't have primary key, will insert it
 func (db *DB) Update(value interface{}) error {
-	tx := db.db.Begin()
-	if err := tx.Model(value).Updates(value).Error; err != nil {
-		tx.Rollback()
+	if err := db.db.Model(value).Updates(value).Error; err != nil {
 		return err
 	}
-	tx.Commit()
 	return nil
 }
 
@@ -75,12 +69,9 @@ func (db *DB) UpdateField(model interface{}, field string, value interface{}) er
 
 //Save update all value in database, if the value doesn't have primary key, will insert it
 func (db *DB) Save(value interface{}) error {
-	tx := db.db.Begin()
-	if err := tx.Save(value).Error; err != nil {
-		tx.Rollback()
+	if err := db.db.Save(value).Error; err != nil {
 		return err
 	}
-	tx.Commit()
 	return nil
 }
 
@@ -89,12 +80,9 @@ func (db *DB) Save(value interface{}) error {
 //and GORM will use the primary key to delete the record, if primary field's blank,
 //GORM will delete all records for the model
 func (db *DB) Delete(value interface{}) error {
-	tx := db.db.Begin()
-	if err := tx.Unscoped().Delete(value).Error; err != nil {
-		tx.Rollback()
+	if err := db.db.Unscoped().Delete(value).Error; err != nil {
 		return err
 	}
-	tx.Commit()
 	return nil
 }
 
@@ -103,24 +91,18 @@ func (db *DB) Delete(value interface{}) error {
 //and GORM will use the primary key to delete the record, if primary field's blank,
 //GORM will delete all records for the model
 func (db *DB) DeleteS(value interface{}) error {
-	tx := db.db.Begin()
-	if err := tx.Delete(value).Error; err != nil {
-		tx.Rollback()
+	if err := db.db.Delete(value).Error; err != nil {
 		return err
 	}
-	tx.Commit()
 	return nil
 }
 
 //batchdelete
 //Delete mutiple values by the given condition
 func (db *DB) BatchDelete(model interface{}, query string) error {
-	tx := db.db.Begin()
-	if err := tx.Unscoped().Where(query).Delete(model).Error; err != nil {
-		tx.Rollback()
+	if err := db.db.Unscoped().Where(query).Delete(model).Error; err != nil {
 		return err
 	}
-	tx.Commit()
 	return nil
 }
 
@@ -183,15 +165,28 @@ func (db *DB) QueryF(condition interface{}, results interface{}) error {
 }
 
 func (db *DB) Raw(models interface{}, sql string, values ...interface{}) error {
-	tx := db.db.Begin()
-	if err := tx.Raw(sql, values...).Scan(models).Error; err != nil {
-		tx.Rollback()
+	if err := db.db.Raw(sql, values...).Scan(models).Error; err != nil {
 		return err
 	}
-	tx.Commit()
 	return nil
 }
 
 func (db *DB) Exec(sql string, values ...interface{}) *gorm.DB {
 	return db.db.Raw(sql, values...)
+}
+
+func (db *DB) Exe(sql string, values ...interface{}) error {
+	return db.db.Exec(sql, values...).Error
+}
+
+//Get get the nums of records
+func (db *DB) Find(value interface{}) (int64, error) {
+	var count int64
+	if err := db.db.Find(value).Count(&count).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return count, nil
 }
