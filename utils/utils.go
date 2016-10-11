@@ -25,16 +25,12 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"reflect"
-	"regexp"
-	"strings"
 	"time"
 )
 
@@ -53,82 +49,6 @@ func IsDirExist(path string) bool {
 func IsFileExist(filename string) bool {
 	_, err := os.Stat(filename)
 	return err == nil || os.IsExist(err)
-}
-
-// Contain checks if an object is included in the target object
-func Contain(obj interface{}, target interface{}) (bool, error) {
-	targetValue := reflect.ValueOf(target)
-
-	switch reflect.TypeOf(target).Kind() {
-	case reflect.Slice, reflect.Array:
-		for i := 0; i < targetValue.Len(); i++ {
-			if targetValue.Index(i).Interface() == obj {
-				return true, nil
-			}
-		}
-	case reflect.Map:
-		if targetValue.MapIndex(reflect.ValueOf(obj)).IsValid() {
-			return true, nil
-		}
-	}
-
-	return false, errors.New("not in array")
-}
-
-// EncodeBasicAuth encodes plain user/password into a base64 string
-func EncodeBasicAuth(username string, password string) string {
-	auth := username + ":" + password
-	msg := []byte(auth)
-	authorization := make([]byte, base64.StdEncoding.EncodedLen(len(msg)))
-	base64.StdEncoding.Encode(authorization, msg)
-	return string(authorization)
-}
-
-// DecodeBasicAuth decodes a base64 string into a plain user/password
-func DecodeBasicAuth(authorization string) (username string, password string, err error) {
-	basic := strings.Split(strings.TrimSpace(authorization), " ")
-	if len(basic) <= 1 {
-		return "", "", err
-	}
-
-	decLen := base64.StdEncoding.DecodedLen(len(basic[1]))
-	decoded := make([]byte, decLen)
-	authByte := []byte(basic[1])
-	n, err := base64.StdEncoding.Decode(decoded, authByte)
-
-	if err != nil {
-		return "", "", err
-	}
-	if n > decLen {
-		return "", "", fmt.Errorf("Something went wrong decoding auth config")
-	}
-
-	arr := strings.SplitN(string(decoded), ":", 2)
-	if len(arr) != 2 {
-		return "", "", fmt.Errorf("Invalid auth configuration file")
-	}
-
-	username = arr[0]
-	password = strings.Trim(arr[1], "\x00")
-
-	return username, password, nil
-}
-
-// ValidatePassword checks if a password is correct
-func ValidatePassword(password string) error {
-	if valida, _ := regexp.MatchString("[:alpha:]", password); valida != true {
-		return fmt.Errorf("No alpha character in the password.")
-	}
-
-	if valida, _ := regexp.MatchString("[:digit:]", password); valida != true {
-		return fmt.Errorf("No digital character in the password.")
-	}
-
-	if len(password) < 5 || len(password) > 30 {
-		return fmt.Errorf("Password characters length should be between 5 - 30.")
-	}
-
-	return nil
 }
 
 // MD5 creates md5 string for an input key
@@ -152,14 +72,15 @@ func SHA512(body []byte) (string, error) {
 }
 
 // SHA512FromFile creates sha512 string for a file
-func SHA512FromStream(reader io.Reader) (string, error) {
+func SHA512FromStream(reader io.Reader) (string, error, int64) {
 	sha512h := sha512.New()
-	if _, err := io.Copy(sha512h, reader); err != nil {
-		return "", err
+	n, err := io.Copy(sha512h, reader)
+	if err != nil {
+		return "", err, 0
 	}
 
 	hash512 := fmt.Sprintf("%x", sha512h.Sum(nil))
-	return hash512, nil
+	return hash512, nil, n
 }
 
 // Compare returns 0 if a, b are equal, -1 if a < b, other wise returns 1
