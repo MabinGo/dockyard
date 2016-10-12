@@ -21,15 +21,10 @@ import "gopkg.in/macaron.v1"
 func SetMiddlewares(m *macaron.Macaron) {
 	m.Use(logger())
 
-	m.Use(Cors())
-	m.Use(WebV1())
-
 	//Set static file directory,static file access without log output
 	m.Use(macaron.Static("external", macaron.StaticOptions{
 		Expires: func() string { return "max-age=0" },
 	}))
-
-	m.Use(dockerVersionChk())
 
 	//Set recovery handler to returns a middleware that recovers from any panics
 	m.Use(macaron.Recovery())

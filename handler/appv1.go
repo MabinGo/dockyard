@@ -95,17 +95,6 @@ func AppGlobalSearchV1Handler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusInternalServerError, result
 	}
 
-	// Get User Info
-	userInfo := new(accessmanager.TokenFormat)
-	if strings.EqualFold(strings.ToLower(setting.AuthEnable), "true") {
-		user, err := GetUserInfo(ctx)
-		if err != nil {
-			log.Errorf("Get User Info Error:%s", err.Error())
-			return http.StatusUnauthorized, []byte("Authenticate Error")
-		}
-		userInfo = user
-	}
-
 	httpbodys := []models.SearchOutput{}
 	for _, v := range results {
 		if v.Active != 1 {
@@ -120,12 +109,6 @@ func AppGlobalSearchV1Handler(ctx *macaron.Context) (int, []byte) {
 
 			result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
 			return http.StatusInternalServerError, result
-		}
-		// Auth Handler
-		if strings.EqualFold(strings.ToLower(setting.AuthEnable), "true") {
-			if a.Namespace != userInfo.Token.User.Domain.Name && !a.IsPublic {
-				continue
-			}
 		}
 
 		rawurl := fmt.Sprintf("%s://%s/app/v1/%s/%s/%s/%s/%s/%s", url.Scheme,
@@ -179,10 +162,7 @@ func AppScopedSearchV1Handler(ctx *macaron.Context) (int, []byte) {
 
 	url := module.NewURLFromRequest(ctx.Req.Request)
 	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
 	u := req.URL
-
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
 
 	values := ctx.Query("key")
 	if len(values) == 0 {
@@ -190,8 +170,6 @@ func AppScopedSearchV1Handler(ctx *macaron.Context) (int, []byte) {
 		log.Error(message)
 
 		result, _ := module.ReportError(module.UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusBadRequest, result
 	}
@@ -212,9 +190,6 @@ func AppScopedSearchV1Handler(ctx *macaron.Context) (int, []byte) {
 			detail := fmt.Sprintf("%s", v)
 			result, _ := module.ReportError(module.NAME_INVALID, "Invalid query parameters format", detail)
 
-			message := "Invalid query parameters format"
-			audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 			return http.StatusBadRequest, result
 		}
 	}
@@ -227,16 +202,12 @@ func AppScopedSearchV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository: %s/%s", namespace, repository)
 		log.Error(message)
 
 		result, _ := module.ReportError(module.UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusNotFound, result
 	}
@@ -248,8 +219,6 @@ func AppScopedSearchV1Handler(ctx *macaron.Context) (int, []byte) {
 		log.Errorf("%s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusInternalServerError, result
 	}
@@ -280,8 +249,6 @@ func AppScopedSearchV1Handler(ctx *macaron.Context) (int, []byte) {
 
 	result, _ := json.Marshal(&httpbodys)
 
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
-
 	return http.StatusOK, result
 }
 
@@ -311,9 +278,6 @@ func AppGetListAppV1Handler(ctx *macaron.Context) (int, []byte) {
 	}
 
 	url := module.NewURLFromRequest(ctx.Req.Request)
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
 
 	a := new(models.AppV1)
 	a.Namespace, a.Repository = namespace, repository
@@ -323,16 +287,12 @@ func AppGetListAppV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository: %s/%s", namespace, repository)
 		log.Error(message)
 
 		result, _ := module.ReportError(module.UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusNotFound, result
 	}
@@ -345,8 +305,6 @@ func AppGetListAppV1Handler(ctx *macaron.Context) (int, []byte) {
 		log.Errorf("%s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusBadRequest, result
 	}
@@ -382,12 +340,8 @@ func AppGetListAppV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	}
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return http.StatusOK, result
 }
@@ -463,10 +417,6 @@ func AppGetFileV1Handler(ctx *macaron.Context) {
 		return
 	}
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	a := new(models.AppV1)
 	a.Namespace, a.Repository = namespace, repository
 	if available, err := a.IsExist(); err != nil {
@@ -476,7 +426,6 @@ func AppGetFileV1Handler(ctx *macaron.Context) {
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 		ctx.Resp.WriteHeader(http.StatusInternalServerError)
 		ctx.Resp.Write(result)
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 		return
 	} else if !available {
 		message := fmt.Sprintf("Not found repository or is busy: %s/%s", namespace, repository)
@@ -485,7 +434,6 @@ func AppGetFileV1Handler(ctx *macaron.Context) {
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, nil)
 		ctx.Resp.WriteHeader(http.StatusNotFound)
 		ctx.Resp.Write(result)
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 		return
 	}
 
@@ -498,7 +446,6 @@ func AppGetFileV1Handler(ctx *macaron.Context) {
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 		ctx.Resp.WriteHeader(http.StatusInternalServerError)
 		ctx.Resp.Write(result)
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 		return
 	} else if !exists || i.Active != 1 {
 		message := fmt.Sprintf("Not found app: %s/%s/%s", system, arch, appname)
@@ -507,7 +454,6 @@ func AppGetFileV1Handler(ctx *macaron.Context) {
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, nil)
 		ctx.Resp.WriteHeader(http.StatusNotFound)
 		ctx.Resp.Write(result)
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 		return
 	}
 
@@ -521,7 +467,6 @@ func AppGetFileV1Handler(ctx *macaron.Context) {
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, err.Error())
 		ctx.Resp.WriteHeader(http.StatusInternalServerError)
 		ctx.Resp.Write(result)
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 		return
 	}
 	defer fd.Close()
@@ -530,8 +475,6 @@ func AppGetFileV1Handler(ctx *macaron.Context) {
 	ctx.Resp.Header().Set("Content-Range", fmt.Sprintf("0-%v", i.Size-1))
 	ctx.Resp.Header().Set("Content-Length", fmt.Sprintf("%v", i.Size))
 	http.ServeContent(ctx.Resp, ctx.Req.Request, i.BlobSum, time.Now(), fd)
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return
 }
@@ -597,10 +540,6 @@ func AppGetManifestsV1Handler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusBadRequest, result
 	}
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	a := new(models.AppV1)
 	a.Namespace, a.Repository = namespace, repository
 	if exists, err := a.IsExist(); err != nil {
@@ -609,16 +548,12 @@ func AppGetManifestsV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository: %s/%s", namespace, repository)
 		log.Error(message)
 
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusNotFound, result
 	}
@@ -631,16 +566,12 @@ func AppGetManifestsV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	} else if !exists || i.Active != 1 {
 		message := fmt.Sprintf("Not found app: %s/%s/%s", system, arch, appname)
 		log.Error(message)
 
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusNotFound, result
 	}
@@ -650,121 +581,6 @@ func AppGetManifestsV1Handler(ctx *macaron.Context) (int, []byte) {
 	ctx.Resp.Header().Set("Content-Type", "application/octet-stream")
 	ctx.Resp.Header().Set("Content-Range", fmt.Sprintf("0-%v", len(content)-1))
 	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(len(content)))
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
-
-	return http.StatusOK, content
-}
-
-// @Title Download repository metadata
-// @Description You can download the metadata of software repository.
-// @Accept json
-// @Attention
-// @Param namespace path string true "application's namespace, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: Huawei"
-// @Param repository path string true "name of application's repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
-// @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
-// @Success 200 {string} string "application's metadata binary data"
-// @Failure 400 {string} string "bad request, parameters or url is error, response error information"
-// @Failure 401 {string} string ""
-// @Failure 500 {string} string "internal server error, response error information of api server"
-// @Router /app/v1/{namespace}/{repository}/meta [get]
-// @ResponseHeaders "Content-Length" "length"
-// @ResponseHeaders "Content-Type" "application/json"
-func AppGetMetaV1Handler(ctx *macaron.Context) (int, []byte) {
-	repository := ctx.Params(":repository")
-	namespace := ctx.Params(":namespace")
-	if errcode, err := module.ValidateName(namespace, repository); err != nil {
-		message := fmt.Sprintf("%s", err.Error())
-		log.Error(message)
-
-		result, _ := module.ReportError(errcode, message, nil)
-		return http.StatusBadRequest, result
-	}
-
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
-	var upService us.UpdateService
-	content, err := upService.ReadMeta("app", namespace, repository)
-	if err != nil {
-		message := fmt.Sprintf("Failed to read meta data of %s/%s", namespace, repository)
-		log.Errorf("%s: %s", message, err.Error())
-
-		result, _ := module.ReportError(module.UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
-		return http.StatusInternalServerError, result
-	}
-
-	ctx.Resp.Header().Set("Content-Type", "application/json")
-	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(len(content)))
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
-
-	return http.StatusOK, content
-}
-
-// @Title Download repository metadata signature
-// @Description You can download the repository metadata signature of software repository.
-// @Accept json
-// @Attention
-// @Param namespace path string true "application's namespace, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: Huawei"
-// @Param repository path string true "name of application's repository, only numbers,letters,bar and underscore are allowed, maxlength is 255 byte. eg: PaaS"
-// @Param Host header string false "registry host, eg: Host: containerops.me"
-// @Param Authorization header string true "authentication token, follow the format as \<scheme\> \<token\>, eg: Authorization: Bearer token..."
-// @Success 200 {string} string "application's metadata signature binary data"
-// @Failure 400 {string} string "bad request, parameters or url is error, response error information"
-// @Failure 401 {string} string ""
-// @Failure 500 {string} string "internal server error, response error information of api server"
-// @Router /app/v1/{namespace}/{repository}/metasign [get]
-// @ResponseHeaders "Content-Length" "length"
-// @ResponseHeaders "Content-Type" "application/octet-stream"
-func AppGetMetaSignV1Handler(ctx *macaron.Context) (int, []byte) {
-	repository := ctx.Params(":repository")
-	namespace := ctx.Params(":namespace")
-	if errcode, err := module.ValidateName(namespace, repository); err != nil {
-		message := fmt.Sprintf("%s", err.Error())
-		log.Error(message)
-
-		result, _ := module.ReportError(errcode, message, nil)
-		return http.StatusBadRequest, result
-	}
-
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
-	if err := us.KeyManagerEnabled(); err != nil {
-		message := "KeyManager is not enabled or does not set proper"
-		log.Errorf("%s: %s", message, err.Error())
-
-		result, _ := module.ReportError(module.UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
-		return http.StatusInternalServerError, result
-	}
-
-	var upService us.UpdateService
-	content, err := upService.ReadMetaSign("app", namespace, repository)
-	if err != nil {
-		message := fmt.Sprintf("Failed to read meta data of %s/%s", namespace, repository)
-		log.Errorf("%s: %s", message, err.Error())
-
-		result, _ := module.ReportError(module.UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
-		return http.StatusInternalServerError, result
-	}
-
-	ctx.Resp.Header().Set("Content-Type", "application/octet-stream")
-	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(len(content)))
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return http.StatusOK, content
 }
@@ -800,10 +616,6 @@ func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 		return respcode, result
 	}
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	_, sessionid, err := module.GenerateSessionID(namespace, repository, setting.APPAPIV1)
 	if err != nil {
 		message := fmt.Sprintf("Failed to get app upload UUID")
@@ -816,8 +628,6 @@ func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 			respcode = http.StatusInternalServerError
 			result, _ = module.ReportError(module.UNKNOWN, message, err.Error())
 		}
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return respcode, result
 	}
@@ -839,8 +649,6 @@ func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 		respcode = http.StatusInternalServerError
 		result, _ = module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return respcode, result
 	}
 
@@ -849,8 +657,6 @@ func AppPostV1Handler(ctx *macaron.Context) (int, []byte) {
 
 	respcode = http.StatusAccepted
 	result, _ = json.Marshal(map[string]string{})
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return respcode, result
 }
@@ -901,10 +707,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		}
 	}()
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	sessionid := ctx.Req.Header.Get("App-Upload-UUID")
 	if _, err := module.ValidateSessionID(namespace, repository, sessionid, setting.APPAPIV1); err != nil {
 		message := fmt.Sprintf("Failed to save file")
@@ -917,8 +719,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 			respcode = http.StatusBadRequest
 			result, _ = module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 		}
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return respcode, result
 	}
@@ -937,8 +737,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		respcode = http.StatusBadRequest
 		result, _ := module.ReportError(errcode, message, nil)
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return respcode, result
 	}
 
@@ -950,8 +748,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		respcode = http.StatusBadRequest
 		result, _ := module.ReportError(errcode, message, nil)
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return respcode, result
 	}
 	hashes := strings.Split(digest, ":")
@@ -961,8 +757,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		respcode = http.StatusBadRequest
 		result, _ = module.ReportError(module.DIGEST_INVALID, message, digest)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return respcode, result
 	}
@@ -977,8 +771,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		respcode = http.StatusInternalServerError
 		result, _ = module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return respcode, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository: %s/%s", namespace, repository)
@@ -986,8 +778,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		respcode = http.StatusNotFound
 		result, _ = module.ReportError(module.BLOB_UNKNOWN, message, sha)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return respcode, result
 	}
@@ -1006,8 +796,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		respcode = http.StatusInternalServerError
 		result, _ = module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return respcode, result
 	}
 
@@ -1025,8 +813,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		respcode = http.StatusBadRequest
 		result, _ = json.Marshal(map[string]string{"message": "Create .aci File Error."})
-		message := "Create .aci File Error."
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return respcode, result
 	}
@@ -1040,8 +826,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		respcode = http.StatusInternalServerError
 		result, _ = module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return respcode, result
 	}
 
@@ -1049,8 +833,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		message := fmt.Sprintf("File too large when adding file to app %s", appPath)
 		log.Error(message)
 		errMsg, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusRequestEntityTooLarge, errMsg
 	}
@@ -1061,8 +843,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	}
 
@@ -1071,8 +851,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		log.Error(message)
 
 		result, _ := module.ReportError(module.DIGEST_INVALID, message, err.Error())
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusInternalServerError, result
 	}
@@ -1083,8 +861,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		log.Error(message)
 
 		result, _ := module.ReportError(module.DIGEST_INVALID, message, digest)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusBadRequest, result
 	}
@@ -1100,8 +876,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		respcode = http.StatusInternalServerError
 		result, _ = module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return respcode, result
 	}
 	i.BlobSum, i.Path, i.Size = sha, appPath, size
@@ -1112,26 +886,10 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		respcode = http.StatusInternalServerError
 		result, _ = module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return respcode, result
 	} else if deleteBlob != "" {
 		deletePath := fmt.Sprintf("%s/%s/%s", setting.DockyardPath, "app", deleteBlob)
 		os.RemoveAll(deletePath)
-	}
-
-	var upService us.UpdateService
-	fullname := fmt.Sprintf("%s/%s/%s/%s", system, arch, appname, tag)
-	if err := upService.Put("app", namespace, repository, fullname, []string{sha}); err != nil {
-		message := fmt.Sprintf("Failed to create a signature for %s/%s/%s", namespace, repository, fullname)
-		log.Errorf("%s", message)
-
-		respcode = http.StatusInternalServerError
-		result, _ = module.ReportError(module.BLOB_UPLOAD_INVALID, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
-		return respcode, result
 	}
 
 	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -1139,8 +897,6 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 
 	respcode = http.StatusCreated
 	result, _ = json.Marshal(map[string]string{})
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return respcode, result
 }
@@ -1188,10 +944,6 @@ func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
 		}
 	}()
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	sessionid := ctx.Req.Header.Get("App-Upload-UUID")
 	if _, err := module.ValidateSessionID(namespace, repository, sessionid, setting.APPAPIV1); err != nil {
 		message := fmt.Sprintf("Failed to save manifest")
@@ -1204,8 +956,6 @@ func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
 			respcode = http.StatusBadRequest
 			result, _ = module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 		}
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return respcode, result
 	}
@@ -1234,8 +984,6 @@ func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
 		respcode = http.StatusBadRequest
 		result, _ := module.ReportError(errcode, message, nil)
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return respcode, result
 	}
 
@@ -1248,8 +996,6 @@ func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
 		respcode = http.StatusInternalServerError
 		result, _ = module.ReportError(module.MANIFEST_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return respcode, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository: %s/%s", namespace, repository)
@@ -1257,8 +1003,6 @@ func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		respcode = http.StatusNotFound
 		result, _ = module.ReportError(module.MANIFEST_UNKNOWN, message, digest)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return respcode, result
 	}
@@ -1271,18 +1015,14 @@ func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.MANIFEST_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	}
 
-	if len(manifest) > _256_KIB { //_256_KIB decleared in handler/webv1.go
+	if len(manifest) > (256 * 1024) { //_256_KIB decleared in handler/webv1.go
 		message := fmt.Sprintf("Failed to save the description of %s/%s, manifests too large", namespace, repository)
 		log.Error(message)
 
 		errMsg, _ := module.ReportError(module.DENIED, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusRequestEntityTooLarge, errMsg
 	}
@@ -1299,16 +1039,11 @@ func AppPutManifestV1Handler(ctx *macaron.Context) (int, []byte) {
 		respcode = http.StatusInternalServerError
 		result, _ = module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return respcode, result
 	}
 
 	respcode = http.StatusCreated
 	result, _ = json.Marshal(map[string]string{})
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
-
 	return respcode, result
 }
 
@@ -1349,10 +1084,6 @@ func AppPatchFileV1Handler(ctx *macaron.Context) (int, []byte) {
 
 	//defer module.ReleaseSessionID(namespace, repository, setting.APPAPIV1, module.END)
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	sessionid := ctx.Req.Header.Get("App-Upload-UUID")
 	if _, err := module.ValidateSessionID(namespace, repository, sessionid, setting.APPAPIV1); err != nil {
 		message := fmt.Sprintf("Failed to patch status")
@@ -1367,8 +1098,6 @@ func AppPatchFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		}
 
 		module.ReleaseSessionID(namespace, repository, setting.APPAPIV1, module.RUNNING)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return respcode, result
 	}
@@ -1390,8 +1119,6 @@ func AppPatchFileV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		module.ReleaseSessionID(namespace, repository, setting.APPAPIV1, module.RUNNING)
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return respcode, result
 	}
 
@@ -1405,8 +1132,6 @@ func AppPatchFileV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		module.ReleaseSessionID(namespace, repository, setting.APPAPIV1, module.RUNNING)
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return respcode, result
 	}
 
@@ -1415,8 +1140,6 @@ func AppPatchFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		result, _ = json.Marshal(map[string]string{})
 
 		module.ReleaseSessionID(namespace, repository, setting.APPAPIV1, module.END)
-
-		audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 		return respcode, result
 	}
@@ -1428,8 +1151,6 @@ func AppPatchFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	result, _ = module.ReportError(module.BLOB_UPLOAD_INVALID, message, status)
 
 	module.ReleaseSessionID(namespace, repository, setting.APPAPIV1, module.RUNNING)
-
-	audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 	return respcode, result
 }
@@ -1488,17 +1209,11 @@ func AppDeleteFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		tag = "latest"
 	}
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	if errcode, err := module.ValidateParams(system, arch, appname, tag); err != nil {
 		message := fmt.Sprintf("%s", err.Error())
 		log.Error(message)
 
 		result, _ := module.ReportError(errcode, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusBadRequest, result
 	}
@@ -1511,16 +1226,12 @@ func AppDeleteFileV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository: %s/%s", namespace, repository)
 		log.Error(message)
 
 		result, _ := module.ReportError(module.UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusNotFound, result
 	}
@@ -1533,16 +1244,12 @@ func AppDeleteFileV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	} else if !exists || i.Active != 1 {
 		message := fmt.Sprintf("Not found app: %s/%s/%s/%s", system, arch, appname, tag)
 		log.Error(message)
 
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusNotFound, result
 	}
@@ -1553,30 +1260,13 @@ func AppDeleteFileV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	} else if deleteBlob != "" {
 		deletePath := fmt.Sprintf("%s/%s/%s", setting.DockyardPath, "app", deleteBlob)
 		os.RemoveAll(deletePath)
 	}
 
-	var upService us.UpdateService
-	fullname := fmt.Sprintf("%s/%s/%s/%s", system, arch, appname, tag)
-	if err := upService.Delete("app", namespace, repository, fullname); err != nil {
-		message := fmt.Sprintf("Failed to remove signature for %s/%s/%s", namespace, repository, fullname)
-		log.Errorf("%s", message)
-
-		result, _ := module.ReportError(module.UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
-		return http.StatusInternalServerError, result
-	}
-
 	result, _ := json.Marshal(map[string]string{})
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return http.StatusOK, result
 }
@@ -1606,15 +1296,9 @@ func AppRecycleV1Handler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusBadRequest, result
 	}
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	if exists, err := module.RecycleSession(namespace, repository, setting.APPAPIV1); err != nil {
 		message := fmt.Sprintf("Failed to recycle %s/%s: %s", namespace, repository, err.Error())
 		log.Errorf("%s", message)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		result, _ := module.ReportError(module.DENIED, message, err.Error())
 		return http.StatusInternalServerError, result
@@ -1624,14 +1308,10 @@ func AppRecycleV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.NAME_UNKNOWN, message, nil)
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusNotFound, result
 	}
 
 	result, _ := json.Marshal(map[string]string{})
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return http.StatusOK, result
 }

@@ -96,10 +96,6 @@ func HeadBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 	tarsum := strings.Split(digest, ":")[1]
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	ctx.Resp.Header().Set("Content-Type", "application/json; charset=utf-8")
 	i := new(models.DockerImageV2)
 	i.BlobSum = tarsum
@@ -109,16 +105,12 @@ func HeadBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.DIGEST_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found blob: %s", tarsum)
 		log.Infof("[REGISTRY API V2] %s", message)
 
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusNotFound, result
 	}
@@ -128,8 +120,6 @@ func HeadBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(i.Size))
 
 	result, _ := json.Marshal(map[string]string{})
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return http.StatusOK, result
 }
@@ -167,16 +157,13 @@ func PostBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	mount := ctx.Query("mount")
 
 	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	u := module.NewURLFromRequest(req)
 
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
+	u := module.NewURLFromRequest(req)
 
 	if mount != "" && !validate.IsDigestValid(mount) {
 		detail := fmt.Sprintf("%s", mount)
 		result, _ := module.ReportError(module.DIGEST_INVALID, "Invalid digest format", detail)
-		message := "Invalid digest format"
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
+
 		return http.StatusBadRequest, result
 	}
 
@@ -193,8 +180,6 @@ func PostBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 		ctx.Resp.Header().Set("Docker-Content-Digest", mount)
 		ctx.Resp.Header().Set("Location", random)
 
-		audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
-
 		return http.StatusCreated, result
 	}
 	random := fmt.Sprintf("%s://%s/v2/%s/blobs/uploads/%s?_state=%s", u.Scheme, u.Host, name, uuid, state)
@@ -203,8 +188,6 @@ func PostBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	ctx.Resp.Header().Set("Docker-Upload-Uuid", uuid)
 	ctx.Resp.Header().Set("Location", random)
 	ctx.Resp.Header().Set("Range", "0-0")
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return http.StatusAccepted, result
 }
@@ -240,9 +223,8 @@ func PatchBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	}
 
 	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
+
 	u := module.NewURLFromRequest(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
 
 	name := namespace + "/" + repository
 	desc := ctx.Params(":uuid")
@@ -263,8 +245,6 @@ func PatchBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	}
 	defer file.Close()
@@ -275,8 +255,6 @@ func PatchBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	}
 
@@ -285,8 +263,6 @@ func PatchBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 		log.Errorf("[REGISTRY API V2] %s", message)
 
 		errMsg, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusRequestEntityTooLarge, errMsg
 	}
@@ -300,8 +276,6 @@ func PatchBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	ctx.Resp.Header().Set("Range", fmt.Sprintf("0-%v", size-1))
 
 	result, _ := json.Marshal(map[string]string{})
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return http.StatusAccepted, result
 }
@@ -338,9 +312,8 @@ func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	}
 
 	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
+
 	u := module.NewURLFromRequest(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
 
 	name := namespace + "/" + repository
 	desc := ctx.Params(":uuid")
@@ -350,8 +323,6 @@ func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	if !validate.IsDigestValid(digest) {
 		detail := fmt.Sprintf("%s", digest)
 		result, _ := module.ReportError(module.DIGEST_INVALID, "Invalid digest format", detail)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, "Invalid digest format")
 
 		return http.StatusBadRequest, result
 	}
@@ -375,8 +346,6 @@ func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	}
 	module.ManiLock.Unlock()
@@ -388,8 +357,6 @@ func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		errMsg, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, nil)
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusRequestEntityTooLarge, errMsg
 	}
 
@@ -398,8 +365,6 @@ func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusInternalServerError, result
 	}
@@ -415,8 +380,6 @@ func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	}
 	i.Path, i.Size = layerPath, layerlen
@@ -425,8 +388,6 @@ func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusInternalServerError, result
 	}
@@ -438,8 +399,6 @@ func PutBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	ctx.Resp.Header().Set("Location", random)
 
 	result, _ := json.Marshal(map[string]string{})
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return http.StatusCreated, result
 }
@@ -486,10 +445,6 @@ func GetBlobsV2Handler(ctx *macaron.Context) {
 		return
 	}
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	tarsum := strings.Split(digest, ":")[1]
 
 	i := new(models.DockerImageV2)
@@ -504,8 +459,6 @@ func GetBlobsV2Handler(ctx *macaron.Context) {
 		ctx.Resp.WriteHeader(http.StatusInternalServerError)
 		ctx.Resp.Write(result)
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return
 	} else if !available {
 		module.ManiLock.Unlock()
@@ -515,8 +468,6 @@ func GetBlobsV2Handler(ctx *macaron.Context) {
 		result, _ := module.ReportError(module.BLOB_UNKNOWN, message, digest)
 		ctx.Resp.WriteHeader(http.StatusNotFound)
 		ctx.Resp.Write(result)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return
 	}
@@ -533,8 +484,6 @@ func GetBlobsV2Handler(ctx *macaron.Context) {
 		ctx.Resp.WriteHeader(http.StatusInternalServerError)
 		ctx.Resp.Write(result)
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return
 	}
 	defer fd.Close()
@@ -543,8 +492,6 @@ func GetBlobsV2Handler(ctx *macaron.Context) {
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
 	ctx.Resp.Header().Set("Content-Length", fmt.Sprint("%v", i.Size))
 	http.ServeContent(ctx.Resp, ctx.Req.Request, tarsum, time.Now(), fd)
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return
 }
@@ -609,9 +556,8 @@ func PutManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 	}
 
 	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
+
 	u := module.NewURLFromRequest(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
 
 	name := namespace + "/" + repository
 	agent := ctx.Req.Header.Get("User-Agent")
@@ -623,8 +569,6 @@ func PutManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 		message := fmt.Sprintf("Failed to get manifest digest")
 		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusBadRequest, result
 	}
@@ -638,15 +582,12 @@ func PutManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 			log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 			result, _ := module.ReportError(module.MANIFEST_INVALID, message, err.Error())
-			audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 			return http.StatusBadRequest, result
 		}
 		message := fmt.Sprintf("Failed to save manifest")
 		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusInternalServerError, result
 	}
@@ -664,8 +605,6 @@ func PutManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 	var status = []int{http.StatusBadRequest, http.StatusAccepted, http.StatusCreated}
 
 	result, _ := json.Marshal(map[string]string{})
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return status[schema], result
 }
@@ -696,10 +635,6 @@ func GetTagsListV2Handler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusBadRequest, result
 	}
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	r := new(models.DockerV2)
 	r.Namespace, r.Repository = namespace, repository
 	module.ManiLock.Lock()
@@ -710,16 +645,12 @@ func GetTagsListV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.TAG_INVALID, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository %s/%s", namespace, repository)
 		log.Errorf("[REGISTRY API V2] %s", message)
 
 		result, _ := module.ReportError(module.TAG_INVALID, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusNotFound, result
 	}
@@ -736,8 +667,6 @@ func GetTagsListV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	}
 	for _, v := range results {
@@ -747,15 +676,11 @@ func GetTagsListV2Handler(ctx *macaron.Context) (int, []byte) {
 		log.Errorf("[REGISTRY API V2] Repository %s/%s tags not found", namespace, repository)
 
 		result, _ := json.Marshal(map[string]string{"message": "Repository tags not found"})
-		message := "Repository tags not found"
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusNotFound, result
 	}
 
 	result, _ := json.Marshal(tl)
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return http.StatusOK, result
 }
@@ -798,10 +723,6 @@ func GetManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusBadRequest, result
 	}
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	r := new(models.DockerV2)
 	r.Namespace, r.Repository = namespace, repository
 	module.ManiLock.Lock()
@@ -812,16 +733,12 @@ func GetManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository %s/%s", namespace, repository)
 		log.Errorf("[REGISTRY API V2]%s", message)
 
 		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusBadRequest, result
 	}
@@ -834,16 +751,12 @@ func GetManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found manifest %s/%s:%s", namespace, repository, tag)
 		log.Errorf("[REGISTRY API V2] %s", message)
 
 		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, message, nil)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusNotFound, result
 	}
@@ -855,8 +768,6 @@ func GetManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	}
 
@@ -864,8 +775,6 @@ func GetManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 	ctx.Resp.Header().Set("Content-Type", contenttype[t.Schema])
 	ctx.Resp.Header().Set("Docker-Content-Digest", digest)
 	ctx.Resp.Header().Set("Content-Length", fmt.Sprint(len(t.Manifest)))
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return http.StatusOK, []byte(t.Manifest)
 }
@@ -907,10 +816,6 @@ func DeleteBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusBadRequest, result
 	}
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	tarsum := strings.Split(digest, ":")[1]
 
 	module.ManiLock.Lock()
@@ -921,16 +826,12 @@ func DeleteBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 			log.Errorf("[REGISTRY API V2] %s", message)
 			result, _ := module.ReportError(module.BLOB_UNKNOWN, message, digest)
 
-			audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 			return http.StatusNotFound, result
 		}
 
 		message := fmt.Sprintf("Failed to delete blob %s", tarsum)
 		log.Errorf("[REGISTRY API V2] %s: %s", message, err.Error())
 		result, _ := module.ReportError(module.UNKNOWN, message, err.Error())
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusInternalServerError, result
 	}
@@ -939,8 +840,6 @@ func DeleteBlobsV2Handler(ctx *macaron.Context) (int, []byte) {
 	ctx.Resp.Header().Set("Content-Length", "0")
 
 	result, _ := json.Marshal(map[string]string{})
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return http.StatusOK, result
 }
@@ -979,10 +878,6 @@ func DeleteManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusBadRequest, result
 	}
 
-	req := ctx.Req.Request
-	client := module.RemoteAddr(req)
-	audit.Request(client, namespace, repository, req.Method, req.URL.Path)
-
 	name := namespace + "/" + repository
 
 	module.ManiLock.Lock()
@@ -996,8 +891,6 @@ func DeleteManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 		detail := map[string]string{"Name": name}
 		result, _ := module.ReportError(module.NAME_INVALID, message, detail)
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	} else if !exists {
 		message := fmt.Sprintf("Not found repository %s/%s", namespace, repository)
@@ -1005,8 +898,6 @@ func DeleteManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		detail := map[string]string{"Name": name}
 		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, message, detail)
-
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusNotFound, result
 	}
@@ -1020,8 +911,6 @@ func DeleteManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.NAME_INVALID, message, nil)
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusInternalServerError, result
 	}
 	//if digest of tag accord with the reference, then delete the tag info
@@ -1033,8 +922,6 @@ func DeleteManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 		log.Errorf("[REGISTRY API V2] Repository %s/%s tags not found", namespace, repository)
 
 		result, _ := json.Marshal(map[string]string{"message": "Repository tags not found"})
-		message := "Repository tags not found"
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
 
 		return http.StatusNotFound, result
 	}
@@ -1044,14 +931,10 @@ func DeleteManifestsV2Handler(ctx *macaron.Context) (int, []byte) {
 
 		result, _ := module.ReportError(module.MANIFEST_UNKNOWN, message, err.Error())
 
-		audit.Failed(client, namespace, repository, req.Method, req.URL.Path, message)
-
 		return http.StatusNotFound, result
 	}
 
 	result, _ := json.Marshal(map[string]string{})
-
-	audit.Succeeded(client, namespace, repository, req.Method, req.URL.Path)
 
 	return http.StatusAccepted, result
 }
@@ -1077,26 +960,9 @@ func GetCatalogV2Handler(ctx *macaron.Context) (int, []byte) {
 		return http.StatusInternalServerError, result
 	}
 
-	// Get User Info
-	userInfo := new(accessmanager.TokenFormat)
-	if strings.EqualFold(strings.ToLower(setting.AuthEnable), "true") {
-		user, err := GetUserInfo(ctx)
-		if err != nil {
-			log.Errorf("Get User Info Error:%s", err.Error())
-			return http.StatusUnauthorized, []byte("Authenticate Error")
-		}
-		userInfo = user
-	}
-
 	rl := new(models.Repolist)
 	var name string
 	for _, v := range results {
-		// Auth Handler
-		if strings.EqualFold(strings.ToLower(setting.AuthEnable), "true") {
-			if v.Namespace != userInfo.Token.User.Domain.Name && !v.IsPublic {
-				continue
-			}
-		}
 
 		if v.Namespace == "" {
 			name = v.Repository
