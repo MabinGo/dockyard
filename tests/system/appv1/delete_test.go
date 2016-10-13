@@ -2,159 +2,135 @@ package appv1
 
 import (
 	"fmt"
-	"io/ioutil"
-	"os"
-	"strings"
 	"testing"
+
+	"github.com/containerops/dockyard/tests/api"
 )
 
 func TestDeleteAPPWithoutTag(t *testing.T) {
-	namespace := "delete"
-	repository := "delapp"
-	operation := "linux"
-	arch := "arm"
-	file := "delapp-v1-linux-arm.tar.gz"
-	manifest := "delapp-v1-linux-arm.txt"
+	app := api.AppV1App{
+		OS:   "linux",
+		Arch: "arm",
+		App:  fileName,
+	}
 
-	TarGz("init_test.go", file)
-	fd, err := os.Create(manifest)
-	defer fd.Close()
+	repo := api.AppV1Repo{
+		URI:        api.DockyardURI,
+		Namespace:  api.UserName,
+		Repository: "delapp",
+	}
+
+	code, err := deleteAppTest(app, repo)
 	if err != nil {
-		t.Fatal(err)
+		if code == 0 {
+			t.Log(err)
+		} else {
+			t.Fatal(err)
+		}
 	}
-
-	_, err = fd.WriteString("this is a test to check a deletable fuction")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer removeFile(file, manifest)
-	if err := pushAPP(DockyardURL, namespace, repository, operation, arch, file, manifest); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := deleteAPP(DockyardURL, namespace, repository, operation, arch, file); err != nil {
-		t.Fatal(err)
-	}
-
-	filePath := "./delapp-v1-tmp.tar.gz"
-	manifestPath := "./delapp-v1-tmp.txt"
-	defer removeFile(filePath, manifestPath)
-	if err := pullAPP(DockyardURL, namespace, repository, operation, arch, file, filePath, manifestPath); err != nil {
-		t.Fatal(err)
-	}
-	buf, err := ioutil.ReadFile(manifestPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(buf), "Not found app") {
-		t.Fatalf("The delete app fuction is falied!")
-	}
-
 }
+
 func TestDeleteAPPWithTag(t *testing.T) {
-	namespace := "delete"
-	repository := "delapp"
-	operation := "linux"
-	arch := "arm"
-	tagLast := "latest"
-	file := "delapp-v1-linux-arm.tar.gz"
-	manifest := "delapp-v1-linux-arm.txt"
+	app := api.AppV1App{
+		OS:   "linux",
+		Arch: "arm",
+		App:  fileName,
+		Tag:  "latest",
+	}
 
-	TarGz("init_test.go", file)
-	fd, err := os.Create(manifest)
-	defer fd.Close()
+	repo := api.AppV1Repo{
+		URI:        api.DockyardURI,
+		Namespace:  api.UserName,
+		Repository: "delapp",
+	}
+	code, err := deleteAppTest(app, repo)
 	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = fd.WriteString("this is a test to check a deletable fuction")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer removeFile(file, manifest)
-
-	if err := pushAPPWithTag(DockyardURL, namespace, repository, operation, arch, file, manifest, tagLast); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := deleteAPPWithTag(DockyardURL, namespace, repository, operation, arch, file, tagLast); err != nil {
-		t.Fatal(err)
-	}
-
-	filePath := "./delapp-v1-tmp.tar.gz"
-	manifestPath := "./delapp-v1-tmp.txt"
-	defer removeFile(filePath, manifestPath)
-	if err := pullAPPWithTag(DockyardURL, namespace, repository, operation, arch, file, filePath, manifestPath, tagLast); err != nil {
-		t.Fatal(err)
-	}
-
-	buf, err := ioutil.ReadFile(manifestPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(buf), "Not found app") {
-		t.Fatalf("The delete app fuction is falied!")
+		if code == 0 {
+			t.Log(err)
+		} else {
+			t.Fatal(err)
+		}
 	}
 }
+
 func TestDeleteMutileAPPWithoutTag(t *testing.T) {
-	PushAPPInit()
-	namespaceGroups := []string{"test", "user", "root", "delete"}
+	app := api.AppV1App{
+		OS:   "linux",
+		Arch: "arm",
+		App:  fileName,
+	}
 	repositoryGroups := []string{"webapp", "testapp", "searchapp", "delapp"}
-	for _, namespace := range namespaceGroups {
-		for _, repository := range repositoryGroups {
-			operation := "linux"
-			arch := "arm"
-			file := "webapp-v0-linux-arm.tar.gz"
-			if err := deleteAPP(DockyardURL, namespace, repository, operation, arch, file); err != nil {
-				fmt.Errorf("%v\n", err.Error())
-			}
-			filePath := "./delapp-v0-tmp.tar.gz"
-			manifestPath := "./delapp-v0-tmp.txt"
-			defer removeFile(file, filePath, manifestPath)
-			if err := pullAPP(DockyardURL, namespace, repository, operation, arch, file, filePath, manifestPath); err != nil {
+	for _, repository := range repositoryGroups {
+		repo := api.AppV1Repo{
+			URI:        api.DockyardURI,
+			Namespace:  api.UserName,
+			Repository: repository,
+		}
+		code, err := deleteAppTest(app, repo)
+		if err != nil {
+			if code == 0 {
+				t.Log(err)
+			} else {
 				t.Fatal(err)
 			}
-
-			buf, err := ioutil.ReadFile(manifestPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !strings.Contains(string(buf), "Not found app") {
-				t.Fatalf("The delete app fuction is falied!")
-			}
+			break
 		}
 	}
-
 }
-func TestDeleteMutileAPPWithTag(t *testing.T) {
-	PushAPPInit()
-	namespaceGroups := []string{"test", "user", "root", "delete"}
-	repositoryGroups := []string{"webapp", "testapp", "searchapp", "delapp"}
-	for _, namespace := range namespaceGroups {
-		for _, repository := range repositoryGroups {
-			operation := "linux"
-			arch := "arm"
-			tagLast := "latest"
-			file := "webapp-v0-linux-arm.tar.gz"
-			if err := deleteAPPWithTag(DockyardURL, namespace, repository, operation, arch, file, tagLast); err != nil {
-				fmt.Errorf("%v\n", err.Error())
-			}
-			filePath := "./delapp-v0-tmp.tar.gz"
-			manifestPath := "./delapp-v0-tmp.txt"
-			defer removeFile(file, filePath, manifestPath)
-			if err := pullAPPWithTag(DockyardURL, namespace, repository, operation, arch, file, filePath, manifestPath, tagLast); err != nil {
-				t.Fatal(err)
-			}
 
-			buf, err := ioutil.ReadFile(manifestPath)
-			if err != nil {
+func TestDeleteMutileAPPWithTag(t *testing.T) {
+	app := api.AppV1App{
+		OS:   "linux",
+		Arch: "arm",
+		App:  fileName,
+		Tag:  "latest",
+	}
+	repositoryGroups := []string{"webapp", "testapp", "searchapp", "delapp"}
+	for _, repository := range repositoryGroups {
+		repo := api.AppV1Repo{
+			URI:        api.DockyardURI,
+			Namespace:  api.UserName,
+			Repository: repository,
+		}
+		code, err := deleteAppTest(app, repo)
+		if err != nil {
+			if code == 0 {
+				t.Log(err)
+			} else {
 				t.Fatal(err)
 			}
-			if !strings.Contains(string(buf), "Not found app") {
-				t.Fatalf("The delete app fuction is falied!")
-			}
+			break
 		}
 	}
+}
 
+func deleteAppTest(app api.AppV1App, repo api.AppV1Repo) (int, error) {
+	appFile := testDir + "/" + fileName
+	manifestFile := testDir + "/" + manifestName
+	pullFileName := testDir + "/" + pullFile
+
+	_, code, err := PushApp(repo, app, api.Token, appFile, manifestFile)
+	if err != nil || code != 202 {
+		if code == 0 {
+			return code, fmt.Errorf("System (not dockyard) error :%s", err)
+		}
+		return code, fmt.Errorf(errStr, code, err, "push app")
+	}
+
+	code, err = repo.Delete(app, api.Token)
+	if err != nil || code != 200 {
+		if code == 0 {
+			return code, fmt.Errorf("System (not dockyard) error :%s", err)
+		}
+		return code, fmt.Errorf(errStr, code, err, "delete app")
+	}
+
+	_, code, err = PullApp(repo, app, api.Token, pullFileName)
+	if code == 0 {
+		return code, fmt.Errorf("System (not dockyard) error :%s", err)
+	}
+	if code == 200 {
+		return code, fmt.Errorf(errStr, code, err, "pull app")
+	}
+	return code, nil
 }

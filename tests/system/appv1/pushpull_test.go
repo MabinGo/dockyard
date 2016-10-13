@@ -1,359 +1,358 @@
 package appv1
 
 import (
-	"bytes"
-	"io/ioutil"
-	"os"
+	"fmt"
 	"testing"
+
+	"github.com/containerops/dockyard/tests/api"
 )
 
 func TestPushPullSingleAPPWithoutTag(t *testing.T) {
-	namespace := "user"
-	repository := "webapp"
-	operation := "linux"
-	arch := "arm"
-	file := "webapp-v1-linux-arm.tar.gz"
-	manifest := "webapp-v1-linux-arm.txt"
-	contents := randomContents(1024 * 1024)
-	if err := ioutil.WriteFile("tmp", contents, 0666); err != nil {
-		t.Fatal(err)
-	}
-	if err := TarGz("tmp", file); err != nil {
-		t.Fatal(err)
-	}
-	fd, err := os.Create(manifest)
-	defer fd.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = fd.WriteString("webapp-v1-linux-arm.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer removeFile(file, manifest, "_tmp/tmp", "tmp")
-	if err := pushAPP(DockyardURL, namespace, repository, operation, arch, file, manifest); err != nil {
-		t.Fatal(err)
-	}
-	filePath := "./webapp-v1-linux-arm.tar.gz"
-	manifestPath := "./webapp-v1-linux-arm.txt"
-	defer removeFile(filePath, manifestPath)
-	if err := pullAPP(DockyardURL, namespace, repository, operation, arch, file, filePath, manifestPath); err != nil {
-		t.Fatal(err)
-	}
-	if err := UnTarGz(filePath, "_tmp"); err != nil {
-		t.Fatal(err)
-	}
-	buf, err := ioutil.ReadFile("_tmp/tmp")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(buf, contents) {
-		t.Fatal("not equal")
+	app := api.AppV1App{
+		OS:   "linux",
+		Arch: "arm",
+		App:  fileName,
 	}
 
-}
-func TestPushPullMutileAPPWithoutTag(t *testing.T) {
-	namespace := "user"
-	repository := "webapp"
-	operation := "linux"
-	arch := "arm"
-	file := "webapp-v1-linux-arm.tar.gz"
-	manifest := "webapp-v1-linux-arm.txt"
-	file1 := "webapp-v2-linux-arm.tar.gz"
-	manifest1 := "webapp-v2-linux-arm.txt"
-	contents := randomContents(1024 * 1024)
-	if err := ioutil.WriteFile("tmp", contents, 0666); err != nil {
-		t.Fatal(err)
+	repo := api.AppV1Repo{
+		URI:        api.DockyardURI,
+		Namespace:  api.UserName,
+		Repository: "pullpushapp",
 	}
-	if err := TarGz("tmp", file); err != nil {
-		t.Fatal(err)
-	}
-	fd, err := os.Create(manifest)
-	defer fd.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = fd.WriteString("webapp-v1-linux-arm.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	contents1 := randomContents(1024 * 1024)
-	if err := ioutil.WriteFile("tmp1", contents1, 0666); err != nil {
-		t.Fatal(err)
-	}
-	if err := TarGz("tmp1", file1); err != nil {
-		t.Fatal(err)
-	}
-	fd, err = os.Create(manifest1)
-	defer fd.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = fd.WriteString("webapp-v2-linux-arm.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer removeFile(file, file1, manifest, manifest1)
-	if err := pushAPP(DockyardURL, namespace, repository, operation, arch, file, manifest); err != nil {
-		t.Fatal(err)
-	}
-	if err := pushAPP(DockyardURL, namespace, repository, operation, arch, file1, manifest1); err != nil {
-		t.Fatal(err)
-	}
-	filePath := "./webapp-v1-linux-arm.tar.gz"
-	manifestPath := "./webapp-v1-linux-arm.txt"
-	defer removeFile(filePath, manifestPath, "_tmp/tmp", "_tmp1/tmp", "_tmp", "_tmp1")
-	if err := pullAPP(DockyardURL, namespace, repository, operation, arch, file, filePath, manifestPath); err != nil {
-		t.Fatal(err)
-	}
-	if err := UnTarGz(filePath, "_tmp"); err != nil {
-		t.Fatal(err)
-	}
-	buf, err := ioutil.ReadFile("_tmp/tmp")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(buf, contents) {
-		t.Fatal("not equal")
-	}
-	filePath1 := "./webapp-v2-linux-arm.tar.gz"
-	manifestPath1 := "./webapp-v2-linux-arm.txt"
-	defer removeFile(filePath1, manifest1)
 
-	if err := pullAPP(DockyardURL, namespace, repository, operation, arch, file1, filePath1, manifestPath1); err != nil {
-		t.Fatal(err)
-	}
-	if err := UnTarGz(filePath, "_tmp1"); err != nil {
-		t.Fatal(err)
-	}
-	buf, err = ioutil.ReadFile("_tmp1/tmp")
+	code, err := pushPullAppTest(app, repo)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(buf, contents) {
-		t.Fatal("not equal")
+		if code == 0 {
+			t.Log(err)
+		} else {
+			t.Fatal(err)
+		}
 	}
 }
+
 func TestPushPullSingleAPPWithTag(t *testing.T) {
+	app := api.AppV1App{
+		OS:   "linux",
+		Arch: "arm",
+		App:  fileName,
+		Tag:  "latest",
+	}
 
-	namespace := "user"
-	repository := "webapp"
-	operation := "linux"
-	arch := "arm"
-	tagLast := "latest"
-	file := "webapp-v1-linux-arm.tar.gz"
-	manifest := "webapp-v1-linux-arm.txt"
-	contents := randomContents(1024 * 1024)
-	if err := ioutil.WriteFile("tmp", contents, 0666); err != nil {
-		t.Fatal(err)
+	repo := api.AppV1Repo{
+		URI:        api.DockyardURI,
+		Namespace:  api.UserName,
+		Repository: "pullpushapp",
 	}
-	if err := TarGz("tmp", file); err != nil {
-		t.Fatal(err)
-	}
-	fd, err := os.Create(manifest)
-	defer fd.Close()
+	code, err := pushPullAppTest(app, repo)
 	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = fd.WriteString("webapp-v1-linux-arm.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer removeFile(file, manifest, "_tmp/tmp", "_tmp", "tmp")
-	if err := pushAPPWithTag(DockyardURL, namespace, repository, operation, arch, file, manifest, tagLast); err != nil {
-		t.Fatal(err)
-	}
-	filePath := "./webapp-v1-linux-arm.tar.gz"
-	manifestPath := "./webapp-v1-linux-arm.txt"
-	defer removeFile(filePath, manifestPath)
-	if err := pullAPPWithTag(DockyardURL, namespace, repository, operation, arch, file, filePath, manifestPath, tagLast); err != nil {
-		t.Fatal(err)
-	}
-	if err := UnTarGz(filePath, "_tmp"); err != nil {
-		t.Fatal(err)
-	}
-	buf, err := ioutil.ReadFile("_tmp/tmp")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(buf, contents) {
-		t.Fatal("not equal")
+		if code == 0 {
+			t.Log(err)
+		} else {
+			t.Fatal(err)
+		}
 	}
 }
+
+func TestPushPullMutileAPPWithoutTag(t *testing.T) {
+	app := api.AppV1App{
+		OS:   "linux",
+		Arch: "arm",
+		App:  fileName,
+	}
+	repositoryGroups := []string{"webapp", "testapp", "searchapp", "pullpushapp"}
+	for _, repository := range repositoryGroups {
+		repo := api.AppV1Repo{
+			URI:        api.DockyardURI,
+			Namespace:  api.UserName,
+			Repository: repository,
+		}
+		code, err := pushPullAppTest(app, repo)
+		if err != nil {
+			if code == 0 {
+				t.Log(err)
+			} else {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+}
+
 func TestPushPullMutileAPPWithTag(t *testing.T) {
-	namespace := "user"
-	repository := "webapp"
-	operation := "linux"
-	arch := "arm"
-	tagLast := "latest"
-	file := "webapp-v1-linux-arm.tar.gz"
-	manifest := "webapp-v1-linux-arm.txt"
-	file1 := "webapp-v2-linux-arm.tar.gz"
-	manifest1 := "webapp-v2-linux-arm.txt"
-	contents := randomContents(1024 * 1024)
-	if err := ioutil.WriteFile("tmp", contents, 0666); err != nil {
-		t.Fatal(err)
+	app := api.AppV1App{
+		OS:   "linux",
+		Arch: "arm",
+		App:  fileName,
+		Tag:  "latest",
 	}
-	if err := TarGz("tmp", file); err != nil {
-		t.Fatal(err)
-	}
-	fd, err := os.Create(manifest)
-	defer fd.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = fd.WriteString("webapp-v1-linux-arm.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	contents1 := randomContents(1024 * 1024)
-	if err := ioutil.WriteFile("tmp1", contents1, 0666); err != nil {
-		t.Fatal(err)
-	}
-	if err := TarGz("tmp1", file1); err != nil {
-		t.Fatal(err)
-	}
-	fd, err = os.Create(manifest1)
-	defer fd.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = fd.WriteString("webapp-v2-linux-arm.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer removeFile(file, file1, manifest, manifest1, "_tmp/tmp", "_tmp1/tmp", "_tmp", "_tmp1")
-	if err := pushAPPWithTag(DockyardURL, namespace, repository, operation, arch, file, manifest, tagLast); err != nil {
-		t.Fatal(err)
-	}
-	if err := pushAPPWithTag(DockyardURL, namespace, repository, operation, arch, file1, manifest1, tagLast); err != nil {
-		t.Fatal(err)
-	}
-	filePath := "./webapp-v1-linux-arm.tar.gz"
-	manifestPath := "./webapp-v1-linux-arm.txt"
-	defer removeFile(filePath, manifestPath)
-	if err := pullAPPWithTag(DockyardURL, namespace, repository, operation, arch, file, filePath, manifestPath, tagLast); err != nil {
-		t.Fatal(err)
-	}
-	if err := UnTarGz(filePath, "_tmp"); err != nil {
-		t.Fatal(err)
-	}
-	buf, err := ioutil.ReadFile("_tmp/tmp")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(buf, contents) {
-		t.Fatal("not equal")
-	}
-	filePath1 := "./webapp-v2-linux-arm.tar.gz"
-	manifestPath1 := "./webapp-v2-linux-arm.txt"
-	defer removeFile(filePath1, manifestPath1)
-	if err := pullAPPWithTag(DockyardURL, namespace, repository, operation, arch, file1, filePath1, manifestPath1, tagLast); err != nil {
-		t.Fatal(err)
-	}
-	if err := UnTarGz(filePath, "_tmp1"); err != nil {
-		t.Fatal(err)
-	}
-	buf, err = ioutil.ReadFile("_tmp1/tmp")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(buf, contents) {
-		t.Fatal("not equal")
+	repositoryGroups := []string{"webapp", "testapp", "searchapp", "pullpushapp"}
+	for _, repository := range repositoryGroups {
+		repo := api.AppV1Repo{
+			URI:        api.DockyardURI,
+			Namespace:  api.UserName,
+			Repository: repository,
+		}
+		code, err := pushPullAppTest(app, repo)
+		if err != nil {
+			if code == 0 {
+				t.Log(err)
+			} else {
+				t.Fatal(err)
+			}
+			break
+		}
 	}
 }
-func TestPushPullDifferentAPPWithDifferentTag(t *testing.T) {
-	namespace := "user"
-	repository := "webapp"
-	operation := "linux"
-	arch := "arm"
-	file := "webapp-v1-linux-arm.tar.gz"
-	manifest := "webapp-v1-linux-arm.txt"
-	file1 := "webapp-v2-linux-arm.tar.gz"
-	manifest1 := "webapp-v2-linux-arm.txt"
-	tagGroups := []string{"latest", "1.0", "2.0"}
 
-	contents := randomContents(1024 * 1024)
-	if err := ioutil.WriteFile("tmp", contents, 0666); err != nil {
-		t.Fatal(err)
-	}
-	if err := TarGz("tmp", file); err != nil {
-		t.Fatal(err)
-	}
-	fd, err := os.Create(manifest)
-	defer fd.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = fd.WriteString("webapp-v1-linux-arm.txt")
-	if err != nil {
-		t.Fatal(err)
+func TestPushPullAPPWithDifferentTag(t *testing.T) {
+	repo := api.AppV1Repo{
+		URI:        api.DockyardURI,
+		Namespace:  api.UserName,
+		Repository: "pullpushapp",
 	}
 
-	for _, tagLast := range tagGroups {
-		defer removeFile(file, manifest)
-		if err := pushAPPWithTag(DockyardURL, namespace, repository, operation, arch, file, manifest, tagLast); err != nil {
+	tagGroups := []string{"latest", "1.0", "2.0", "3.0"}
+	for _, tagName := range tagGroups {
+		app := api.AppV1App{
+			OS:   "linux",
+			Arch: "arm",
+			App:  fileName,
+			Tag:  tagName,
+		}
+		code, err := pushPullAppTest(app, repo)
+		if err != nil {
+			if code == 0 {
+				t.Log(err)
+			} else {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+}
+
+func TestPushExistedAPP(t *testing.T) {
+	app := api.AppV1App{
+		OS:   "linux",
+		Arch: "arm",
+		App:  fileName,
+		Tag:  "latest",
+	}
+
+	repo := api.AppV1Repo{
+		URI:        api.DockyardURI,
+		Namespace:  api.UserName,
+		Repository: "pullpushapp",
+	}
+	code, err := pushPullAppTest(app, repo)
+	if err != nil {
+		if code == 0 {
+			t.Log(err)
+		} else {
+			t.Fatal(err)
+		}
+		return
+	}
+	code, err = pushPullAppTest(app, repo)
+	if err != nil {
+		if code == 0 {
+			t.Log(err)
+		} else {
 			t.Fatal(err)
 		}
 	}
-	for _, tagLast := range tagGroups {
-		filePath := "./" + tagLast + "webapp-v1-linux-arm.tar.gz"
-		manifestPath := "./" + tagLast + "webapp-v1-linux-arm.txt"
-		defer removeFile(filePath, manifestPath, "_tmp/tmp", "_tmp")
-		if err := pullAPPWithTag(DockyardURL, namespace, repository, operation, arch, file, filePath, manifestPath, tagLast); err != nil {
-			t.Fatal(err)
-			if err := UnTarGz(filePath, "_tmp"); err != nil {
-				t.Fatal(err)
-			}
-			buf, err := ioutil.ReadFile("_tmp/tmp")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(buf, contents) {
-				t.Fatal("not equal")
-			}
+}
 
-		}
-	}
-	contents1 := randomContents(1024 * 1024)
-	if err := ioutil.WriteFile("tmp1", contents1, 0666); err != nil {
-		t.Fatal(err)
-	}
-	if err := TarGz("tmp1", file1); err != nil {
-		t.Fatal(err)
-	}
-	fd, err = os.Create(manifest1)
-	defer fd.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = fd.WriteString("webapp-v2-linux-arm.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tagLast := range tagGroups {
-		defer removeFile(file, file1, manifest, manifest1, "tmp", "tmp1")
-		if err := pushAPPWithTag(DockyardURL, namespace, repository, operation, arch, file1, manifest1, tagLast); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, tagLast := range tagGroups {
-		filePath1 := "./" + tagLast + "webapp-v2-linux-arm.tar.gz"
-		manifestPath1 := "./" + tagLast + "webapp-v2-linux-arm.txt"
-		defer removeFile(filePath1, manifestPath1, "_tmp1/tmp", "_tmp1")
-		if err := pullAPPWithTag(DockyardURL, namespace, repository, operation, arch, file1, filePath1, manifestPath1, tagLast); err != nil {
-			t.Fatal(err)
-			if err := UnTarGz(filePath1, "_tmp"); err != nil {
-				t.Fatal(err)
-			}
-			buf, err := ioutil.ReadFile("_tmp/tmp")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(buf, contents) {
-				t.Fatal("not equal")
-			}
-		}
+/*
+func TestPullAPPMeta(t *testing.T) {
+	repo := api.AppV1Repo{
+		URI:        api.DockyardURI,
+		Namespace:  api.UserName,
+		Repository: "pullpushapp",
 	}
 
+	_, code, err := repo.GetMeta(api.Token)
+	if code != 200 || err != nil {
+		if code == 0 {
+			t.Logf("System (not dockyard) error :%s", err)
+		} else {
+			t.Fatalf(errStr, code, err, "get meta")
+		}
+		return
+	}
+
+	_, code, err = repo.GetMetaSign(api.Token)
+	if (code != 200 && code != 500) || err != nil {
+		if code == 0 {
+			t.Log(fmt.Sprintf("System (not dockyard) error :%s", err))
+		} else {
+			t.Fatalf(errStr, code, err, "get meta sign")
+		}
+	}
+}
+
+func TestPullAPPMetaWithNamespaceEqualNull(t *testing.T) {
+	repo := api.AppV1Repo{
+		URI:        api.DockyardURI,
+		Namespace:  "",
+		Repository: "pullpushapp",
+	}
+
+	_, code, err := repo.GetMeta(api.Token)
+	if err == nil && code == 200 {
+		t.Fatal(errStr, code, err, "get meta")
+		return
+	}
+
+	_, code, err = repo.GetMetaSign(api.Token)
+	if err == nil && code == 200 {
+		t.Fatal(errStr, code, err, "get meta sign")
+	}
+}
+
+func TestPullAPPMetaWithRepositoryEqualNull(t *testing.T) {
+	repo := api.AppV1Repo{
+		URI:        api.DockyardURI,
+		Namespace:  api.UserName,
+		Repository: "",
+	}
+
+	_, code, err := repo.GetMeta(api.Token)
+	if err == nil && code == 200 {
+		t.Fatal(errStr, code, err, "get meta")
+		return
+	}
+
+	_, code, err = repo.GetMetaSign(api.Token)
+	if err == nil && code == 200 {
+		t.Fatal(errStr, code, err, "get meta sign")
+	}
+}
+
+func TestPullAPPMetaWithNamespaceEmpty(t *testing.T) {
+	repo := api.AppV1Repo{
+		URI:        api.DockyardURI,
+		Namespace:  " ",
+		Repository: "pullpushapp",
+	}
+
+	_, code, err := repo.GetMeta(api.Token)
+	if err == nil && code == 200 {
+		t.Fatal(errStr, code, err, "get meta")
+		return
+	}
+
+	_, code, err = repo.GetMetaSign(api.Token)
+	if err == nil && code == 200 {
+		t.Fatal(errStr, code, err, "get meta sign")
+	}
+}
+
+func TestPullAPPMetaWithRepositoryEqualEmpty(t *testing.T) {
+	repo := api.AppV1Repo{
+		URI:        api.DockyardURI,
+		Namespace:  api.UserName,
+		Repository: " ",
+	}
+
+	_, code, err := repo.GetMeta(api.Token)
+	if err == nil && code == 200 {
+		t.Fatal(errStr, code, err, "get meta")
+		return
+	}
+
+	_, code, err = repo.GetMetaSign(api.Token)
+	if err == nil && code == 200 {
+		t.Fatal(errStr, code, err, "get meta sign")
+	}
+}
+*/
+func TestPushPull500MTarWithTag(t *testing.T) {
+	app := api.AppV1App{
+		OS:   "linux",
+		Arch: "arm",
+		App:  fileName,
+		Tag:  "v500",
+	}
+
+	repo := api.AppV1Repo{
+		URI:        api.DockyardURI,
+		Namespace:  api.UserName,
+		Repository: "pullpushapp",
+	}
+
+	appFile := testDir + "/" + maxSizeFile
+	manifestFile := testDir + "/" + maxSizeManifest
+	pullFileName := testDir + "/" + pullFile
+
+	_, code, err := PushApp(repo, app, api.Token, appFile, manifestFile)
+	if err != nil || code != 202 {
+		if code == 0 {
+			t.Logf("System (not dockyard) error :%s", err)
+			return
+		}
+		t.Fatalf(errStr, code, err, "push app")
+		return
+	}
+
+	pushSha512, code, err := PushApp(repo, app, api.Token, appFile, manifestFile)
+	if err != nil || code != 202 {
+		if code == 0 {
+			t.Logf("System (not dockyard) error :%s", err)
+			return
+		}
+		t.Fatalf(errStr, code, err, "push app")
+		return
+	}
+
+	pullSha512, code, err := PullApp(repo, app, api.Token, pullFileName)
+	if err != nil || code != 200 {
+		if code == 0 {
+			t.Logf("System (not dockyard) error :%s", err)
+			return
+		}
+		t.Fatalf(errStr, code, err, "pull app")
+		return
+	}
+	if diffPullPushSha512(pushSha512, pullSha512) {
+		t.Fatalf("pull and push sha512 was inconsistent push:%v, pull: %v", pushSha512, pullSha512)
+		return
+	}
+}
+
+func pushPullAppTest(app api.AppV1App, repo api.AppV1Repo) (int, error) {
+	appFile := testDir + "/" + fileName
+	manifestFile := testDir + "/" + manifestName
+	pullFileName := testDir + "/" + pullFile
+
+	_, code, err := PushApp(repo, app, api.Token, appFile, manifestFile)
+	if err != nil || code != 202 {
+		fmt.Println("pushSha512 first")
+		if code == 0 {
+			return code, fmt.Errorf("System (not dockyard) error :%s", err)
+		}
+		return code, fmt.Errorf(errStr, code, err, "push app")
+	}
+
+	pushSha512, code, err := PushApp(repo, app, api.Token, appFile, manifestFile)
+	if err != nil || code != 202 {
+		fmt.Println("pushSha512")
+		if code == 0 {
+			return code, fmt.Errorf("System (not dockyard) error :%s", err)
+		}
+		return code, fmt.Errorf(errStr, code, err, "push app")
+	}
+
+	pullSha512, code, err := PullApp(repo, app, api.Token, pullFileName)
+	if err != nil || code != 200 {
+		fmt.Println("pullSha512")
+		if code == 0 {
+			return code, fmt.Errorf("System (not dockyard) error :%s", err)
+		}
+		return code, fmt.Errorf(errStr, code, err, "pull app")
+	}
+	if diffPullPushSha512(pushSha512, pullSha512) {
+		return code, fmt.Errorf("pull and push sha512 was inconsistent push:%v, pull: %v", pushSha512, pullSha512)
+	}
+	return code, nil
 }
