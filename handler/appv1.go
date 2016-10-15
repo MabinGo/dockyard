@@ -782,9 +782,7 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		return respcode, result
 	}
 
-	imagePath := fmt.Sprintf("%s/%s/%s", setting.DockyardPath, "app", sha)
-	appPath := fmt.Sprintf("%s/%s", imagePath, "app")
-
+	
 	i := new(models.ArtifactV1)
 	i.AppV1, i.OS, i.Arch, i.App, i.Tag = a.Id, system, arch, appname, tag
 	condition := new(models.ArtifactV1)
@@ -799,8 +797,14 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 		return respcode, result
 	}
 
-	module.SaveImageID(namespace, repository, i.Id, setting.APPAPIV1)
+	//save image pk id in order to recycle image if err occured
+	err := module.SaveImageID(namespace, repository, i.Id, setting.APPAPIV1)
+	if err != nil {
+		fmt.Println(" #### test AppPutFileV1Handler fgfgfg err=", err.Error())
+	}
 
+	imagePath := module.GetAppImagePath(namespace, repository, sha)
+	appPath := module.GetAppLayerPath(namespace, repository, sha, "app")
 	if !utils.IsDirExist(imagePath) {
 		os.MkdirAll(imagePath, 0750)
 	}
@@ -809,11 +813,12 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 	defer module.AppFileLock.Unlock()
 	file, err := os.OpenFile(appPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0640)
 	if err != nil {
-		log.Errorf("Create app file error: %s %s", appPath, err.Error())
+		message := fmt.Sprintf("Failed to open app file %s", appPath)
+		log.Errorf("%s: %s", message, err.Error())
 
 		respcode = http.StatusBadRequest
-		result, _ = json.Marshal(map[string]string{"message": "Create .aci File Error."})
-
+		result, _ = module.ReportError(module.BLOB_UPLOAD_INVALID, message, err.Error())
+	
 		return respcode, result
 	}
 	defer file.Close()
@@ -888,7 +893,7 @@ func AppPutFileV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		return respcode, result
 	} else if deleteBlob != "" {
-		deletePath := fmt.Sprintf("%s/%s/%s", setting.DockyardPath, "app", deleteBlob)
+		deletePath := module.GetAppImagePath(namespace, repository, deleteBlob)
 		os.RemoveAll(deletePath)
 	}
 
@@ -1262,7 +1267,7 @@ func AppDeleteFileV1Handler(ctx *macaron.Context) (int, []byte) {
 
 		return http.StatusInternalServerError, result
 	} else if deleteBlob != "" {
-		deletePath := fmt.Sprintf("%s/%s/%s", setting.DockyardPath, "app", deleteBlob)
+		deletePath := module.GetAppImagePath(namespace, repository, deleteBlob)
 		os.RemoveAll(deletePath)
 	}
 

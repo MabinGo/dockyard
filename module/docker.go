@@ -22,6 +22,16 @@ import (
 var FileLock sync.RWMutex
 var ManiLock sync.RWMutex
 
+var Apis = []string{"images", "tarsum"}
+
+func GetImagePath(imageId string, apiversion int64) string {
+	return fmt.Sprintf("%s/%s/%s", setting.DockyardPath, Apis[apiversion], imageId)
+}
+
+func GetLayerPath(imageId, layerfile string, apiversion int64) string {
+	return fmt.Sprintf("%s/%s/%s/%s", setting.DockyardPath, Apis[apiversion], imageId, layerfile)
+}
+
 // NewURLFromRequest uses information from an *http.Request to
 // construct the url.
 func NewURLFromRequest(r *http.Request) *url.URL {
@@ -567,10 +577,6 @@ func SaveLayerLocal(srcPath, srcFile, dstPath, dstFile string, reqbody io.Reader
 	digest := path.Base(dstPath)
 	if !utils.IsDirExist(dstPath) {
 		os.MkdirAll(dstPath, 0750)
-	}
-
-	if utils.IsFileExist(dstFile) {
-		os.Remove(dstFile)
 	}
 
 	var layerlen int64
